@@ -4,6 +4,7 @@
 #include "TempColModels.h"
 #include "ModelIndices.h"
 #include "ModelInfo.h"
+#include "Frontend.h"
 
 CBaseModelInfo *CModelInfo::ms_modelInfoPtrs[MODELINFOSIZE];
 
@@ -217,20 +218,21 @@ CModelInfo::IsBikeModel(int32 id)
 void
 CModelInfo::RemoveColModelsFromOtherLevels(eLevelName level)
 {
-#ifndef NO_ISLAND_LOADING
-	int i;
-	CBaseModelInfo *mi;
-	CColModel *colmodel;
+	ISLAND_LOADING_IS(LOW)
+	{
+		int i;
+		CBaseModelInfo *mi;
+		CColModel *colmodel;
 
-	for(i = 0; i < MODELINFOSIZE; i++){
-		mi = GetModelInfo(i);
-		if(mi){
-			colmodel = mi->GetColModel();
-			if(colmodel && colmodel->level != LEVEL_GENERIC && colmodel->level != level)
-				colmodel->RemoveCollisionVolumes();
+		for (i = 0; i < MODELINFOSIZE; i++) {
+			mi = GetModelInfo(i);
+			if (mi) {
+				colmodel = mi->GetColModel();
+				if (colmodel && colmodel->level != LEVEL_GENERIC && colmodel->level != level)
+					colmodel->RemoveCollisionVolumes();
+			}
 		}
 	}
-#endif
 }
 
 void

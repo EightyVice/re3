@@ -11,7 +11,11 @@
 #include "platform.h"
 #ifdef XINPUT
 #include <xinput.h>
+#if !defined(PSAPI_VERSION) || (PSAPI_VERSION > 1)
 #pragma comment( lib, "Xinput9_1_0.lib" )
+#else
+#pragma comment( lib, "Xinput.lib" )
+#endif
 #endif
 
 #include "Pad.h"
@@ -1104,7 +1108,9 @@ void CPad::UpdatePads(void)
 	if ( bUpdate )
 	{
 		GetPad(0)->Update(0);
+#ifndef SQUEEZE_PERFORMANCE
 		GetPad(1)->Update(0);
+#endif
 	}
 
 #if defined(MASTER) && !defined(XINPUT)

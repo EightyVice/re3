@@ -4,6 +4,7 @@
 #include "Draw.h"
 #include "Camera.h"
 #include "Sprite2d.h"
+#include "Font.h"
 
 RwIm2DVertex CSprite2d::maVertices[8];
 float CSprite2d::RecipNearClip;
@@ -27,14 +28,18 @@ CSprite2d::InitPerFrame(void)
 	mCurrentBank = 0;
 	for(i = 0; i < 10; i++)
 		mCurrentSprite[i] = 0;
+#ifndef SQUEEZE_PERFORMANCE
 	for(i = 0; i < 10; i++)
 		mpBankTextures[i] = nil;
+#endif
 }
 
 int32
 CSprite2d::GetBank(int32 n, RwTexture *tex)
 {
+#ifndef SQUEEZE_PERFORMANCE
 	mpBankTextures[mCurrentBank] = tex;
+#endif
 	mCurrentSprite[mCurrentBank] = 0;
 	mBankStart[mCurrentBank+1] = mBankStart[mCurrentBank] + n;
 	return mCurrentBank++;
@@ -59,8 +64,12 @@ CSprite2d::DrawBank(int32 bank)
 {
 	if(mCurrentSprite[bank] == 0)
 		return;
+#ifndef SQUEEZE_PERFORMANCE
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER,
 		mpBankTextures[bank] ? RwTextureGetRaster(mpBankTextures[bank]) : nil);
+#else
+	CFont::Sprite[bank].SetRenderState();
+#endif
 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
 	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
 	RwIm2DRenderPrimitive(rwPRIMTYPETRILIST, &maBankVertices[6*mBankStart[bank]], 6*mCurrentSprite[bank]);
@@ -169,6 +178,7 @@ CSprite2d::SetVertices(const CRect &r, const CRGBA &c0, const CRGBA &c1, const C
 		z = 1.0f/RecipNearClip;
 	}
 	recipz = 1.0f/z;
+	float offset = 1.0f/1024.0f;
 
 	// This is what we draw:
 	// 0---1
@@ -180,8 +190,8 @@ CSprite2d::SetVertices(const CRect &r, const CRGBA &c0, const CRGBA &c1, const C
 	RwIm2DVertexSetCameraZ(&maVertices[0], z);
 	RwIm2DVertexSetRecipCameraZ(&maVertices[0], recipz);
 	RwIm2DVertexSetIntRGBA(&maVertices[0], c2.r, c2.g, c2.b, c2.a);
-	RwIm2DVertexSetU(&maVertices[0], 0.0f, recipz);
-	RwIm2DVertexSetV(&maVertices[0], 0.0f, recipz);
+	RwIm2DVertexSetU(&maVertices[0], 0.0f+offset, recipz);
+	RwIm2DVertexSetV(&maVertices[0], 0.0f+offset, recipz);
 
 	RwIm2DVertexSetScreenX(&maVertices[1], r.right);
 	RwIm2DVertexSetScreenY(&maVertices[1], r.top);
@@ -189,8 +199,8 @@ CSprite2d::SetVertices(const CRect &r, const CRGBA &c0, const CRGBA &c1, const C
 	RwIm2DVertexSetCameraZ(&maVertices[1], z);
 	RwIm2DVertexSetRecipCameraZ(&maVertices[1], recipz);
 	RwIm2DVertexSetIntRGBA(&maVertices[1], c3.r, c3.g, c3.b, c3.a);
-	RwIm2DVertexSetU(&maVertices[1], 1.0f, recipz);
-	RwIm2DVertexSetV(&maVertices[1], 0.0f, recipz);
+	RwIm2DVertexSetU(&maVertices[1], 1.0f+offset, recipz);
+	RwIm2DVertexSetV(&maVertices[1], 0.0f+offset, recipz);
 
 	RwIm2DVertexSetScreenX(&maVertices[2], r.right);
 	RwIm2DVertexSetScreenY(&maVertices[2], r.bottom);
@@ -198,8 +208,8 @@ CSprite2d::SetVertices(const CRect &r, const CRGBA &c0, const CRGBA &c1, const C
 	RwIm2DVertexSetCameraZ(&maVertices[2], z);
 	RwIm2DVertexSetRecipCameraZ(&maVertices[2], recipz);
 	RwIm2DVertexSetIntRGBA(&maVertices[2], c1.r, c1.g, c1.b, c1.a);
-	RwIm2DVertexSetU(&maVertices[2], 1.0f, recipz);
-	RwIm2DVertexSetV(&maVertices[2], 1.0f, recipz);
+	RwIm2DVertexSetU(&maVertices[2], 1.0f+offset, recipz);
+	RwIm2DVertexSetV(&maVertices[2], 1.0f+offset, recipz);
 
 	RwIm2DVertexSetScreenX(&maVertices[3], r.left);
 	RwIm2DVertexSetScreenY(&maVertices[3], r.bottom);
@@ -207,8 +217,8 @@ CSprite2d::SetVertices(const CRect &r, const CRGBA &c0, const CRGBA &c1, const C
 	RwIm2DVertexSetCameraZ(&maVertices[3], z);
 	RwIm2DVertexSetRecipCameraZ(&maVertices[3], recipz);
 	RwIm2DVertexSetIntRGBA(&maVertices[3], c0.r, c0.g, c0.b, c0.a);
-	RwIm2DVertexSetU(&maVertices[3], 0.0f, recipz);
-	RwIm2DVertexSetV(&maVertices[3], 1.0f, recipz);
+	RwIm2DVertexSetU(&maVertices[3], 0.0f+offset, recipz);
+	RwIm2DVertexSetV(&maVertices[3], 1.0f+offset, recipz);
 }
 
 void

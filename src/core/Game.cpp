@@ -87,6 +87,8 @@
 #include "Zones.h"
 #include "debugmenu.h"
 #include "frontendoption.h"
+#include "postfx.h"
+#include "custompipes.h"
 
 eLevelName CGame::currLevel;
 bool CGame::bDemoMode = true;
@@ -106,6 +108,7 @@ int gameTxdSlot;
 
 bool DoRWStuffStartOfFrame(int16 TopRed, int16 TopGreen, int16 TopBlue, int16 BottomRed, int16 BottomGreen, int16 BottomBlue, int16 Alpha);
 void DoRWStuffEndOfFrame(void);
+#ifdef PS2_MENU
 void MessageScreen(char *msg)
 {
 	//TODO: stretch_screen
@@ -139,6 +142,7 @@ void MessageScreen(char *msg)
 	
 	DoRWStuffEndOfFrame();
 }
+#endif
 
 bool
 CGame::InitialiseOnceBeforeRW(void)
@@ -146,6 +150,9 @@ CGame::InitialiseOnceBeforeRW(void)
 	CFileMgr::Initialise();
 	CdStreamInit(MAX_CDCHANNELS);
 	ValidateVersion();
+#ifdef EXTENDED_COLOURFILTER
+	CPostFX::InitOnce();
+#endif
 	return true;
 }
 
@@ -288,7 +295,10 @@ bool CGame::InitialiseOnceAfterRW(void)
 	CWorld::Players[0].SetPlayerSkin(CMenuManager::m_PrefsSkinFile);
 
 #ifdef CUSTOM_FRONTEND_OPTIONS
-	CustomFrontendOptionsPopulate();
+	if (numCustomFrontendOptions == 0 && numCustomFrontendScreens == 0) {
+		CustomFrontendOptionsPopulate();
+		FrontEndMenuManager.LoadSettings();
+	}
 #endif
 	return true;
 }
@@ -354,6 +364,10 @@ bool CGame::Initialise(const char* datFile)
 	CdStreamAddImage("MODELS\\GTA3.IMG");
 	CFileLoader::LoadLevel("DATA\\DEFAULT.DAT");
 	CFileLoader::LoadLevel(datFile);
+#ifdef EXTENDED_PIPELINES
+	// for generic fallback
+	CustomPipes::SetTxdFindCallback();
+#endif
 	CWorld::AddParticles();
 	CVehicleModelInfo::LoadVehicleColours();
 	CVehicleModelInfo::LoadEnvironmentMaps();
@@ -431,6 +445,7 @@ bool CGame::Initialise(const char* datFile)
 	if ( !TheMemoryCard.m_bWantToLoad )
 	{
 #endif
+	LoadingScreen("Loading the Game", "Start script", nil);
 	CTheScripts::StartTestScript();
 	CTheScripts::Process();
 	TheCamera.Process();

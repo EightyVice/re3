@@ -4994,7 +4994,7 @@ int8 CRunningScript::ProcessCommands300To399(int32 command)
 			pos.z = CWorld::FindGroundZForCoord(pos.x, pos.y);
 		// Useless call
 		CRadar::GetActualBlipArrayIndex(CollectNextParameterWithoutIncreasingPC(m_nIp));
-		int handle = CRadar::SetCoordBlip(BLIP_COORD, pos, 2, BLIP_DISPLAY_BOTH);
+		int handle = CRadar::SetCoordBlip(BLIP_CONTACT_POINT, pos, 2, BLIP_DISPLAY_BOTH);
 		CRadar::ChangeBlipScale(handle, 3);
 		ScriptParams[0] = handle;
 		StoreParameters(&m_nIp, 1);
@@ -9319,7 +9319,7 @@ int8 CRunningScript::ProcessCommands900To999(int32 command)
 		CVector pos = *(CVector*)&ScriptParams[0];
 		if (pos.z <= MAP_Z_LOW_LIMIT)
 			pos.z = CWorld::FindGroundZForCoord(pos.x, pos.y);
-		C3dMarkers::PlaceMarkerSet((uintptr)this + m_nIp, 4, pos, *(float*)&ScriptParams[3],
+		C3dMarkers::PlaceMarkerSet((uintptr)this + m_nIp, MARKERTYPE_CYLINDER, pos, *(float*)&ScriptParams[3],
 			SPHERE_MARKER_R, SPHERE_MARKER_G, SPHERE_MARKER_B, SPHERE_MARKER_A,
 			SPHERE_MARKER_PULSE_PERIOD, SPHERE_MARKER_PULSE_FRACTION, 0);
 		return 0;
@@ -9700,7 +9700,7 @@ int8 CRunningScript::ProcessCommands900To999(int32 command)
 			return 0;
 		CVehicle* car;
 		if (!CModelInfo::IsBikeModel(model))
-			car = new CAutomobile(model, MISSION_VEHICLE);
+			car = new CAutomobile(model, RANDOM_VEHICLE);
 		CVector pos = *(CVector*)&ScriptParams[0];
 		pos.z += car->GetDistanceFromCentreOfMassToBaseOfModel();
 		car->SetPosition(pos);
@@ -10017,15 +10017,17 @@ int8 CRunningScript::ProcessCommands1000To1099(int32 command)
 		CollectParameters(&m_nIp, 1);
 		CTimer::Stop();
 		CGame::currLevel = (eLevelName)ScriptParams[0];
-#ifndef NO_ISLAND_LOADING
-		CStreaming::RemoveUnusedBigBuildings(CGame::currLevel);
-		CStreaming::RemoveUnusedBuildings(CGame::currLevel);
-#endif
+		ISLAND_LOADING_IS(LOW)
+		{
+			CStreaming::RemoveUnusedBigBuildings(CGame::currLevel);
+			CStreaming::RemoveUnusedBuildings(CGame::currLevel);
+		}
 		CCollision::SortOutCollisionAfterLoad();
-#ifndef NO_ISLAND_LOADING
-		CStreaming::RequestIslands(CGame::currLevel);
-		CStreaming::LoadAllRequestedModels(true);
-#endif
+		ISLAND_LOADING_ISNT(HIGH)
+		{
+			CStreaming::RequestIslands(CGame::currLevel);
+			CStreaming::LoadAllRequestedModels(true);
+		}
 		CTimer::Update();
 		return 0;
 	}
@@ -10641,24 +10643,33 @@ int8 CRunningScript::ProcessCommands1100To1199(int32 command)
 		CTimer::Stop();
 		CGame::currLevel = (eLevelName)ScriptParams[0];
 		if (CGame::currLevel != CCollision::ms_collisionInMemory) {
-#ifndef NO_ISLAND_LOADING
-			DMAudio.SetEffectsFadeVol(0);
-			CPad::StopPadsShaking();
-			CCollision::LoadCollisionScreen(CGame::currLevel);
-			DMAudio.Service();
-#endif
+			ISLAND_LOADING_IS(LOW)
+			{
+				DMAudio.SetEffectsFadeVol(0);
+				CPad::StopPadsShaking();
+				CCollision::LoadCollisionScreen(CGame::currLevel);
+				DMAudio.Service();
+			}
 			CPopulation::DealWithZoneChange(CCollision::ms_collisionInMemory, CGame::currLevel, false);
-#ifndef NO_ISLAND_LOADING
-			CStreaming::RemoveUnusedBigBuildings(CGame::currLevel);
-			CStreaming::RemoveUnusedBuildings(CGame::currLevel);
-#endif
+
+			ISLAND_LOADING_IS(LOW)
+			{
+				CStreaming::RemoveUnusedBigBuildings(CGame::currLevel);
+				CStreaming::RemoveUnusedBuildings(CGame::currLevel);
+			}
 			CCollision::SortOutCollisionAfterLoad();
-#ifndef NO_ISLAND_LOADING
-			CStreaming::RequestIslands(CGame::currLevel);
-			CStreaming::RequestBigBuildings(CGame::currLevel);
-			CStreaming::LoadAllRequestedModels(true);
-			DMAudio.SetEffectsFadeVol(127);
-#endif
+
+			ISLAND_LOADING_ISNT(HIGH)
+				CStreaming::RequestIslands(CGame::currLevel);
+
+			ISLAND_LOADING_IS(LOW)
+				CStreaming::RequestBigBuildings(CGame::currLevel);
+
+			ISLAND_LOADING_ISNT(HIGH)
+				CStreaming::LoadAllRequestedModels(true);
+
+			ISLAND_LOADING_IS(LOW)
+				DMAudio.SetEffectsFadeVol(127);
 		}
 		CTimer::Update();
 		return 0;
@@ -11243,7 +11254,7 @@ void CTheScripts::DrawScriptSpheres()
 {
 	for (int i = 0; i < MAX_NUM_SCRIPT_SPHERES; i++) {
 		if (ScriptSphereArray[i].m_bInUse)
-			C3dMarkers::PlaceMarkerSet(ScriptSphereArray[i].m_Id, 4, ScriptSphereArray[i].m_vecCenter, ScriptSphereArray[i].m_fRadius,
+			C3dMarkers::PlaceMarkerSet(ScriptSphereArray[i].m_Id, MARKERTYPE_CYLINDER, ScriptSphereArray[i].m_vecCenter, ScriptSphereArray[i].m_fRadius,
 				SPHERE_MARKER_R, SPHERE_MARKER_G, SPHERE_MARKER_B, SPHERE_MARKER_A, SPHERE_MARKER_PULSE_PERIOD, SPHERE_MARKER_PULSE_FRACTION, 0);
 	}
 }

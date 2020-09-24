@@ -117,8 +117,7 @@ CPopulation::Initialise()
 void
 CPopulation::RemovePed(CPed *ent)
 {
-	// CPed dtor already does that
-	// CWorld::Remove((CEntity*)ent);
+	CWorld::Remove((CEntity*)ent);
 	delete ent;
 }
 
@@ -1104,7 +1103,11 @@ CPopulation::ManagePopulation(void)
 	}
 
 	int pedPoolSize = CPools::GetPedPool()->GetSize();
+#ifndef SQUEEZE_PERFORMANCE
 	for (int poolIndex = pedPoolSize-1; poolIndex >= 0; poolIndex--) {
+#else
+	for (int poolIndex = (pedPoolSize * (frameMod32 + 1) / 32) - 1; poolIndex >= pedPoolSize * frameMod32 / 32; poolIndex--) {
+#endif
 		CPed *ped = CPools::GetPedPool()->GetSlot(poolIndex);
 
 		if (ped && !ped->IsPlayer() && ped->CanBeDeleted() && !ped->bInVehicle) {
@@ -1117,6 +1120,13 @@ CPopulation::ManagePopulation(void)
 			}
 
 			float dist = (ped->GetPosition() - playerPos).Magnitude2D();
+#ifdef SQUEEZE_PERFORMANCE
+			if (dist > 50.f)
+				ped->bUsesCollision = false;
+			else
+				ped->bUsesCollision = true;
+#endif
+
 			bool pedIsFarAway = false;
 			if (PedCreationDistMultiplier() * (PED_REMOVE_DIST_SPECIAL * TheCamera.GenerationDistMultiplier) < dist
 				|| (!ped->bCullExtraFarAway && PedCreationDistMultiplier() * PED_REMOVE_DIST * TheCamera.GenerationDistMultiplier < dist)

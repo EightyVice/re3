@@ -32,6 +32,7 @@
 #include "Replay.h"
 #endif
 #include "main.h"
+#include "Frontend.h"
 
 bool CStreaming::ms_disableStreaming;
 bool CStreaming::ms_bLoadingBigModel;
@@ -272,8 +273,12 @@ CStreaming::Shutdown(void)
 {
 	RwFreeAlign(ms_pStreamingBuffer[0]);
 	ms_streamingBufferSize = 0;
-	if(ms_pExtraObjectsDir)
+	if(ms_pExtraObjectsDir){
 		delete ms_pExtraObjectsDir;
+#ifdef FIX_BUGS
+		ms_pExtraObjectsDir = nil;
+#endif
+	}
 }
 
 void
@@ -727,7 +732,9 @@ CStreaming::RequestBigBuildings(eLevelName level)
 	for(i = n; i >= 0; i--){
 		b = CPools::GetBuildingPool()->GetSlot(i);
 		if(b && b->bIsBIGBuilding
-#ifndef NO_ISLAND_LOADING
+#ifdef NO_ISLAND_LOADING
+		    && ((CMenuManager::m_PrefsIslandLoading != CMenuManager::ISLAND_LOADING_LOW) || (b->m_level == level))
+#else
 		    && b->m_level == level
 #endif
 		)
@@ -740,7 +747,7 @@ CStreaming::RequestBigBuildings(eLevelName level)
 void
 CStreaming::RequestIslands(eLevelName level)
 {
-#ifndef NO_ISLAND_LOADING
+	ISLAND_LOADING_ISNT(HIGH)
 	switch(level){
 	case LEVEL_INDUSTRIAL:
 		RequestModel(islandLODcomInd, BIGBUILDINGFLAGS);
@@ -756,7 +763,6 @@ CStreaming::RequestIslands(eLevelName level)
 		break;
 	default: break;
 	}
-#endif
 }
 
 void
@@ -942,14 +948,15 @@ CStreaming::RemoveBuildings(eLevelName level)
 void
 CStreaming::RemoveUnusedBigBuildings(eLevelName level)
 {
-#ifndef NO_ISLAND_LOADING
-	if(level != LEVEL_INDUSTRIAL)
-		RemoveBigBuildings(LEVEL_INDUSTRIAL);
-	if(level != LEVEL_COMMERCIAL)
-		RemoveBigBuildings(LEVEL_COMMERCIAL);
-	if(level != LEVEL_SUBURBAN)
-		RemoveBigBuildings(LEVEL_SUBURBAN);
-#endif
+	ISLAND_LOADING_IS(LOW)
+	{
+		if (level != LEVEL_INDUSTRIAL)
+			RemoveBigBuildings(LEVEL_INDUSTRIAL);
+		if (level != LEVEL_COMMERCIAL)
+			RemoveBigBuildings(LEVEL_COMMERCIAL);
+		if (level != LEVEL_SUBURBAN)
+			RemoveBigBuildings(LEVEL_SUBURBAN);
+	}
 	RemoveIslandsNotUsed(level);
 }
 
@@ -969,7 +976,15 @@ DeleteIsland(CEntity *island)
 void
 CStreaming::RemoveIslandsNotUsed(eLevelName level)
 {
-#ifndef NO_ISLAND_LOADING
+#ifdef NO_ISLAND_LOADING
+	if (CMenuManager::m_PrefsIslandLoading == CMenuManager::ISLAND_LOADING_HIGH) {
+		DeleteIsland(pIslandLODindustEntity);
+		DeleteIsland(pIslandLODcomIndEntity);
+		DeleteIsland(pIslandLODcomSubEntity);
+		DeleteIsland(pIslandLODsubIndEntity);
+		DeleteIsland(pIslandLODsubComEntity);
+	} else
+#endif
 	switch(level){
 	case LEVEL_INDUSTRIAL:
 		DeleteIsland(pIslandLODindustEntity);
@@ -987,16 +1002,13 @@ CStreaming::RemoveIslandsNotUsed(eLevelName level)
 		DeleteIsland(pIslandLODcomIndEntity);
 		break;
 	default:
-#endif // !NO_ISLAND_LOADING
 		DeleteIsland(pIslandLODindustEntity);
 		DeleteIsland(pIslandLODcomIndEntity);
 		DeleteIsland(pIslandLODcomSubEntity);
 		DeleteIsland(pIslandLODsubIndEntity);
 		DeleteIsland(pIslandLODsubComEntity);
-#ifndef NO_ISLAND_LOADING
 		break;
 	}
-#endif // !NO_ISLAND_LOADING
 }
 
 void
@@ -1183,7 +1195,7 @@ found:
 			if(id == -1)
 				return false;	// still no luck
 			ms_lastVehicleDeleted = id;
-			// this is more that we wanted actually
+			// this is more than we wanted actually
 			ms_numVehiclesLoaded++;
 		}else
 			RemoveModel(id);
@@ -1376,18 +1388,17 @@ CStreaming::StreamZoneModels(const CVector &pos)
 		// unload pevious group
 		if(ms_currentPedGrp != -1)
 			for(i = 0; i < NUMMODELSPERPEDGROUP; i++){
-				if(CPopulation::ms_pPedGroups[ms_currentPedGrp].models[i] == -1)
-					break;
-				SetModelIsDeletable(CPopulation::ms_pPedGroups[ms_currentPedGrp].models[i]);
-				SetModelTxdIsDeletable(CPopulation::ms_pPedGroups[ms_currentPedGrp].models[i]);
+				if(CPopulation::ms_pPedGroups[ms_currentPedGrp].models[i] != -1){
+					SetModelIsDeletable(CPopulation::ms_pPedGroups[ms_currentPedGrp].models[i]);
+					SetModelTxdIsDeletable(CPopulation::ms_pPedGroups[ms_currentPedGrp].models[i]);
+				}
 			}
 
 		ms_currentPedGrp = info.pedGroup;
 
 		for(i = 0; i < NUMMODELSPERPEDGROUP; i++){
-			if(CPopulation::ms_pPedGroups[ms_currentPedGrp].models[i] == -1)
-				break;
-			RequestModel(CPopulation::ms_pPedGroups[ms_currentPedGrp].models[i], STREAMFLAGS_DONT_REMOVE);
+			if(CPopulation::ms_pPedGroups[ms_currentPedGrp].models[i] != -1)
+				RequestModel(CPopulation::ms_pPedGroups[ms_currentPedGrp].models[i], STREAMFLAGS_DONT_REMOVE);
 		}
 	}
 	RequestModel(MI_MALE01, STREAMFLAGS_DONT_REMOVE);
@@ -1585,8 +1596,6 @@ CStreaming::GetNextFileOnCd(int32 lastPosn, bool priority)
  * Files larger than the buffer size can only be loaded by channel 0,
  * which then uses both buffers, while channel 1 is idle.
  * ms_bLoadingBigModel is set to true to indicate this state.
- *
- * TODO: two-part files
  */
 
 // Make channel read from disc
@@ -1927,7 +1936,7 @@ CStreaming::UpdateMemoryUsed(void)
 	// empty
 }
 
-#define STREAM_DIST (2*SECTOR_SIZE_X)
+#define STREAM_DIST 80.0f
 
 void
 CStreaming::AddModelsToRequestList(const CVector &pos)
@@ -2224,7 +2233,7 @@ CStreaming::DeleteRwObjectsBehindCamera(size_t mem)
 		assert(ymin <= ymax);
 
 		// Delete a block of sectors that we know is behind the camera
-		if(TheCamera.GetForward().x > 0){
+		if(TheCamera.GetForward().x > 0.0f){
 			// looking east
 			xmax = Max(ix - 2, 0);
 			xmin = Max(ix - 10, 0);
@@ -2246,7 +2255,7 @@ CStreaming::DeleteRwObjectsBehindCamera(size_t mem)
 		}
 
 		// Now a block that intersects with the camera's frustum
-		if(TheCamera.GetForward().x > 0){
+		if(TheCamera.GetForward().x > 0.0f){
 			// looking east
 			xmax = Max(ix + 10, 0);
 			xmin = Max(ix - 2, 0);
@@ -2288,7 +2297,7 @@ CStreaming::DeleteRwObjectsBehindCamera(size_t mem)
 		assert(xmin <= xmax);
 
 		// Delete a block of sectors that we know is behind the camera
-		if(TheCamera.GetForward().y > 0){
+		if(TheCamera.GetForward().y > 0.0f){
 			// looking north
 			ymax = Max(iy - 2, 0);
 			ymin = Max(iy - 10, 0);
@@ -2310,7 +2319,7 @@ CStreaming::DeleteRwObjectsBehindCamera(size_t mem)
 		}
 
 		// Now a block that intersects with the camera's frustum
-		if(TheCamera.GetForward().y > 0){
+		if(TheCamera.GetForward().y > 0.0f){
 			// looking north
 			ymax = Max(iy + 10, 0);
 			ymin = Max(iy - 2, 0);

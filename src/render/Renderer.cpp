@@ -19,6 +19,8 @@
 #include "Shadows.h"
 #include "PointLights.h"
 #include "Renderer.h"
+#include "Frontend.h"
+#include "custompipes.h"
 
 bool gbShowPedRoadGroups;
 bool gbShowCarRoadGroups;
@@ -73,8 +75,12 @@ CRenderer::PreRender(void)
 	for(i = 0; i < ms_nNoOfVisibleEntities; i++)
 		ms_aVisibleEntityPtrs[i]->PreRender();
 
-	for(i = 0; i < ms_nNoOfInVisibleEntities; i++)
+	for (i = 0; i < ms_nNoOfInVisibleEntities; i++) {
+#ifdef SQUEEZE_PERFORMANCE
+		if (ms_aInVisibleEntityPtrs[i]->IsVehicle() && ((CVehicle*)ms_aInVisibleEntityPtrs[i])->IsHeli())
+#endif
 		ms_aInVisibleEntityPtrs[i]->PreRender();
+	}
 
 	for(node = CVisibilityPlugins::m_alphaEntityList.head.next;
 	    node != &CVisibilityPlugins::m_alphaEntityList.tail;
@@ -92,8 +98,12 @@ CRenderer::RenderOneRoad(CEntity *e)
 		return;
 	if(gbShowCollisionPolys)
 		CCollision::DrawColModel_Coloured(e->GetMatrix(), *CModelInfo::GetModelInfo(e->GetModelIndex())->GetColModel(), e->GetModelIndex());
-	else
+	else{
+#ifdef EXTENDED_PIPELINES
+		CustomPipes::AttachGlossPipe(e->GetAtomic());
+#endif
 		e->Render();
+	}
 }
 
 void
@@ -227,6 +237,11 @@ CRenderer::RenderEverythingBarRoads(void)
 
 		if(e->IsBuilding() && ((CBuilding*)e)->GetIsATreadable())
 			continue;
+
+#ifdef EXTENDED_PIPELINES
+		if(CustomPipes::bRenderingEnvMap && (e->IsPed() || e->IsVehicle()))
+			continue;
+#endif
 
 		if(e->IsVehicle() ||
 		   e->IsPed() && CVisibilityPlugins::GetClumpAlpha((RpClump*)e->m_rwObject) != 255){
@@ -706,15 +721,18 @@ CRenderer::ScanWorld(void)
 				ScanSectorPoly(poly, 3, ScanSectorList);
 			}
 #ifdef NO_ISLAND_LOADING
-			ScanBigBuildingList(CWorld::GetBigBuildingList(LEVEL_INDUSTRIAL));
-			ScanBigBuildingList(CWorld::GetBigBuildingList(LEVEL_COMMERCIAL));
-			ScanBigBuildingList(CWorld::GetBigBuildingList(LEVEL_SUBURBAN));
-#else
+			if (CMenuManager::m_PrefsIslandLoading == CMenuManager::ISLAND_LOADING_HIGH) {
+				ScanBigBuildingList(CWorld::GetBigBuildingList(LEVEL_INDUSTRIAL));
+				ScanBigBuildingList(CWorld::GetBigBuildingList(LEVEL_COMMERCIAL));
+				ScanBigBuildingList(CWorld::GetBigBuildingList(LEVEL_SUBURBAN));
+			} else 
+#endif
+			{
 	#ifdef FIX_BUGS
 			if (CCollision::ms_collisionInMemory != LEVEL_GENERIC)
 	#endif
-			ScanBigBuildingList(CWorld::GetBigBuildingList(CCollision::ms_collisionInMemory));
-#endif
+				ScanBigBuildingList(CWorld::GetBigBuildingList(CCollision::ms_collisionInMemory));
+			}
 			ScanBigBuildingList(CWorld::GetBigBuildingList(LEVEL_GENERIC));
 		}
 	}
@@ -807,6 +825,12 @@ CalcNewDelta(RwV2d *a, RwV2d *b)
 	return (b->x - a->x) / (b->y - a->y);
 }
 
+#ifdef FIX_BUGS
+#define TOINT(x) ((int)Floor(x))
+#else
+#define TOINT(x) ((int)(x))
+#endif
+
 void
 CRenderer::ScanSectorPoly(RwV2d *poly, int32 numVertices, void (*scanfunc)(CPtrList *))
 {
@@ -832,8 +856,8 @@ CRenderer::ScanSectorPoly(RwV2d *poly, int32 numVertices, void (*scanfunc)(CPtrL
 			a2 = i;
 		}
 	}
-	y = miny;
-	yend = maxy;
+	y = TOINT(miny);
+	yend = TOINT(maxy);
 
 	// Go left in poly to find first edge b
 	b2 = a2;
@@ -841,8 +865,8 @@ CRenderer::ScanSectorPoly(RwV2d *poly, int32 numVertices, void (*scanfunc)(CPtrL
 		b1 = b2--;
 		if(b2 < 0) b2 = numVertices-1;
 		if(poly[b1].x < xstart)
-			xstart = poly[b1].x;
-		if((int)poly[b1].y != (int)poly[b2].y)
+			xstart = TOINT(poly[b1].x);
+		if(TOINT(poly[b1].y) != TOINT(poly[b2].y))
 			break;
 	}
 	// Go right to find first edge a
@@ -850,8 +874,8 @@ CRenderer::ScanSectorPoly(RwV2d *poly, int32 numVertices, void (*scanfunc)(CPtrL
 		a1 = a2++;
 		if(a2 == numVertices) a2 = 0;
 		if(poly[a1].x > xend)
-			xend = poly[a1].x;
-		if((int)poly[a1].y != (int)poly[a2].y)
+			xend = TOINT(poly[a1].x);
+		if(TOINT(poly[a1].y) != TOINT(poly[a2].y))
 			break;
 	}
 
@@ -862,17 +886,17 @@ CRenderer::ScanSectorPoly(RwV2d *poly, int32 numVertices, void (*scanfunc)(CPtrL
 	xB = deltaB * (Ceil(poly[b1].y) - poly[b1].y) + poly[b1].x;
 
 	if(y != yend){
-		if(deltaB < 0.0f && (int)xB < xstart)
-			xstart = xB;
-		if(deltaA >= 0.0f && (int)xA > xend)
-			xend = xA;
+		if(deltaB < 0.0f && TOINT(xB) < xstart)
+			xstart = TOINT(xB);
+		if(deltaA >= 0.0f && TOINT(xA) > xend)
+			xend = TOINT(xA);
 	}
 
 	while(y <= yend && y < NUMSECTORS_Y){
 		// scan one x-line
 		if(y >= 0 && xstart < NUMSECTORS_X)
-			for(x = xstart; x <= xend; x++)
-				if(x >= 0 && x != NUMSECTORS_X)
+			for(x = xstart; x <= xend && x != NUMSECTORS_X; x++)
+				if(x >= 0)
 					scanfunc(CWorld::GetSector(x, y)->m_lists);
 
 		// advance one scan line
@@ -881,74 +905,74 @@ CRenderer::ScanSectorPoly(RwV2d *poly, int32 numVertices, void (*scanfunc)(CPtrL
 		xB += deltaB;
 
 		// update left side
-		if(y == (int)poly[b2].y){
+		if(y == TOINT(poly[b2].y)){
 			// reached end of edge
 			if(y == yend){
 				if(deltaB < 0.0f){
 					do{
-						xstart = poly[b2--].x;
+						xstart = TOINT(poly[b2--].x);
 						if(b2 < 0) b2 = numVertices-1;
-					}while(xstart > (int)poly[b2].x);
+					}while(xstart > TOINT(poly[b2].x));
 				}else
-					xstart = xB - deltaB;
+					xstart = TOINT(xB - deltaB);
 			}else{
 				// switch edges
 				if(deltaB < 0.0f)
-					xstart = poly[b2].x;
+					xstart = TOINT(poly[b2].x);
 				else
-					xstart = xB - deltaB;
+					xstart = TOINT(xB - deltaB);
 				do{
 					b1 = b2--;
 					if(b2 < 0) b2 = numVertices-1;
-					if((int)poly[b1].x < xstart)
-						xstart = poly[b1].x;
-				}while(y == (int)poly[b2].y);
+					if(TOINT(poly[b1].x) < xstart)
+						xstart = TOINT(poly[b1].x);
+				}while(y == TOINT(poly[b2].y));
 				deltaB = CalcNewDelta(&poly[b1], &poly[b2]);
 				xB = deltaB * (Ceil(poly[b1].y) - poly[b1].y) + poly[b1].x;
-				if(deltaB < 0.0f && (int)xB < xstart)
-					xstart = xB;
+				if(deltaB < 0.0f && TOINT(xB) < xstart)
+					xstart = TOINT(xB);
 			}
 		}else{
 			if(deltaB < 0.0f)
-				xstart = xB;
+				xstart = TOINT(xB);
 			else
-				xstart = xB - deltaB;
+				xstart = TOINT(xB - deltaB);
 		}
 
 		// update right side
-		if(y == (int)poly[a2].y){
+		if(y == TOINT(poly[a2].y)){
 			// reached end of edge
 			if(y == yend){
 				if(deltaA < 0.0f)
-					xend = xA - deltaA;
+					xend = TOINT(xA - deltaA);
 				else{
 					do{
-						xend = poly[a2++].x;
+						xend = TOINT(poly[a2++].x);
 						if(a2 == numVertices) a2 = 0;
-					}while(xend < (int)poly[a2].x);
+					}while(xend < TOINT(poly[a2].x));
 				}
 			}else{
 				// switch edges
 				if(deltaA < 0.0f)
-					xend = xA - deltaA;
+					xend = TOINT(xA - deltaA);
 				else
-					xend = poly[a2].x;
+					xend = TOINT(poly[a2].x);
 				do{
 					a1 = a2++;
 					if(a2 == numVertices) a2 = 0;
-					if((int)poly[a1].x > xend)
-						xend = poly[a1].x;
-				}while(y == (int)poly[a2].y);
+					if(TOINT(poly[a1].x) > xend)
+						xend = TOINT(poly[a1].x);
+				}while(y == TOINT(poly[a2].y));
 				deltaA = CalcNewDelta(&poly[a1], &poly[a2]);
 				xA = deltaA * (Ceil(poly[a1].y) - poly[a1].y) + poly[a1].x;
-				if(deltaA >= 0.0f && (int)xA > xend)
-					xend = xA;
+				if(deltaA >= 0.0f && TOINT(xA) > xend)
+					xend = TOINT(xA);
 			}
 		}else{
 			if(deltaA < 0.0f)
-				xend = xA - deltaA;
+				xend = TOINT(xA - deltaA);
 			else
-				xend = xA;
+				xend = TOINT(xA);
 		}
 	}
 }

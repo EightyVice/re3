@@ -202,9 +202,6 @@ WriteVideoCardCapsFile(void)
 	}
 }
 
-bool DoRWStuffStartOfFrame(int16 TopRed, int16 TopGreen, int16 TopBlue, int16 BottomRed, int16 BottomGreen, int16 BottomBlue, int16 Alpha);
-void DoRWStuffEndOfFrame(void);
-
 void
 ConvertingTexturesScreen(uint32 num, uint32 count, const char *text)
 {
@@ -289,6 +286,11 @@ CreateTxdImageForVideoCard()
 		ConvertingTexturesScreen(i, TXDSTORESIZE, "CVT_MSG");
 
 		if (CTxdStore::GetSlot(i) != nil && CStreaming::IsObjectInCdImage(i + STREAM_OFFSET_TXD)) {
+#ifdef FIX_BUGS
+			if(strcmp(CTxdStore::GetTxdName(i), "generic") == 0)
+				continue;
+#endif
+
 			CStreaming::RequestTxd(i, STREAMFLAGS_KEEP_IN_MEMORY);
 			CStreaming::RequestModelStream(0);
 			CStreaming::FlushChannels();

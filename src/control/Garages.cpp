@@ -1384,7 +1384,7 @@ void CGarage::RemoveCarsBlockingDoorNotInside()
 		if (pVehicle->GetPosition().x < m_fX1 || pVehicle->GetPosition().x > m_fX2 ||
 			pVehicle->GetPosition().y < m_fY1 || pVehicle->GetPosition().y > m_fY2 ||
 			pVehicle->GetPosition().z < m_fZ1 || pVehicle->GetPosition().z > m_fZ2) {
-			if (pVehicle->bIsLocked && pVehicle->CanBeDeleted()) {
+			if (!pVehicle->bIsLocked && pVehicle->CanBeDeleted()) {
 				CWorld::Remove(pVehicle);
 				delete pVehicle;
 				return; // WHY?
@@ -1884,8 +1884,9 @@ CVehicle* CStoredCar::RestoreCar()
 	pVehicle->m_nRadioStation = m_nRadioStation;
 	pVehicle->bFreebies = false;
 #ifdef FIX_BUGS
-	((CAutomobile*)pVehicle)->m_bombType = m_nCarBombType;
+	if (pVehicle->IsCar())
 #endif
+		((CAutomobile*)pVehicle)->m_bombType = m_nCarBombType;
 	pVehicle->bHasBeenOwnedByPlayer = true;
 	pVehicle->m_nDoorLock = CARLOCK_UNLOCKED;
 	pVehicle->bBulletProof = m_bBulletproof;

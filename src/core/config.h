@@ -8,7 +8,8 @@ enum Config {
 	MAX_CDCHANNELS = 5,
 
 	MODELINFOSIZE = 5500,
-	TXDSTORESIZE = 850,
+//	TXDSTORESIZE = 850,
+	TXDSTORESIZE = 1024,	// for Xbox map
 	EXTRADIRSIZE = 128,
 	CUTSCENEDIRSIZE = 512,
 
@@ -158,7 +159,7 @@ enum Config {
 #if defined GTA_PS2
 #	define GTA_PS2_STUFF
 #	define RANDOMSPLASH
-#	define COMPRESSED_COL_VECTORS
+#	define VU_COLLISION
 #elif defined GTA_PC
 #	define GTA3_1_1_PATCH
 //#	define GTA3_STEAM_PATCH
@@ -168,6 +169,10 @@ enum Config {
 #		define PS2_MATFX
 #	endif
 #elif defined GTA_XBOX
+#endif
+
+#ifdef VU_COLLISION
+#define COMPRESSED_COL_VECTORS	// current need compressed vectors in this code
 #endif
 
 #ifdef MASTER
@@ -201,9 +206,17 @@ enum Config {
 #define PS2_ALPHA_TEST		// emulate ps2 alpha test 
 #define IMPROVED_VIDEOMODE	// save and load videomode parameters instead of a magic number
 #define DISABLE_LOADING_SCREEN // disable the loading screen which vastly improves the loading time
-//#define NO_ISLAND_LOADING  // disable loadscreen between islands via loading all island data at once, consumes more memory and CPU
+#define NO_ISLAND_LOADING  // disable loadscreen between islands via loading all island data at once, consumes more memory and CPU
 //#define USE_TEXTURE_POOL
 #define CUTSCENE_BORDERS_SWITCH
+//#define EXTENDED_COLOURFILTER		// more options for colour filter (replaces mblur)
+//#define EXTENDED_PIPELINES		// custom render pipelines (includes Neo)
+#define MULTISAMPLING		// adds MSAA option
+
+#ifdef LIBRW
+// these are not supported with librw yet
+#	undef MULTISAMPLING
+#endif
 
 // Particle
 //#define PC_PARTICLE
@@ -218,6 +231,7 @@ enum Config {
 #define ALLCARSHELI_CHEAT
 #define ALT_DODO_CHEAT
 #define REGISTER_START_BUTTON
+//#define BIND_VEHICLE_FIREWEAPON // Adds ability to rebind fire key for 'in vehicle' controls
 
 // Hud, frontend and radar
 #define HUD_ENHANCEMENTS	// Adjusts some aspects to make the HUD look/behave a little bit better.
@@ -228,14 +242,15 @@ enum Config {
 #ifndef PC_MENU
 #	define PS2_MENU
 //#	define PS2_MENU_USEALLPAGEICONS
-#else
 #	define PS2_SAVE_DIALOG		// PS2 style save dialog with transparent black box
 //#	define PS2_LIKE_MENU	// An effort to recreate PS2 menu, cycling through tabs, different bg etc.
+#else
 #	define MENU_MAP			// VC-like menu map. Make sure you have new menu.txd
 #	define SCROLLABLE_STATS_PAGE	// only draggable by mouse atm
 #	define TRIANGLE_BACK_BUTTON
 //#	define CIRCLE_BACK_BUTTON
 #	define CUSTOM_FRONTEND_OPTIONS
+#	define GRAPHICS_MENU_OPTIONS // otherwise Advanced Options menu will appear if Display is full
 #endif
 
 // Script
@@ -283,3 +298,12 @@ enum Config {
 #define AUDIO_CACHE // cache sound lengths to speed up the cold boot
 #endif
 //#define PS2_AUDIO   // changes audio paths for cutscenes and radio to PS2 paths, needs vbdec to support VB with MSS
+
+
+//#define SQUEEZE_PERFORMANCE
+#ifdef SQUEEZE_PERFORMANCE
+	#undef PS2_ALPHA_TEST
+	#undef NO_ISLAND_LOADING
+	#define PC_PARTICLE
+	#define VC_PED_PORTS // To not process collisions always. But should be tested if that's really beneficial
+#endif

@@ -155,7 +155,10 @@ enum eSaveSlot
 	SAVESLOT_6,
 	SAVESLOT_7,
 	SAVESLOT_8,
-	SAVESLOT_LABEL = 36
+	SAVESLOT_LABEL = 36,
+#ifdef CUSTOM_FRONTEND_OPTIONS
+	SAVESLOT_CFO
+#endif
 };
 
 #ifdef MENU_MAP
@@ -183,7 +186,7 @@ enum eMenuScreen
 	MENUPAGE_BRIEFS = 3,
 	MENUPAGE_CONTROLLER_SETTINGS = 4,
 	MENUPAGE_SOUND_SETTINGS = 5,
-	MENUPAGE_GRAPHICS_SETTINGS = 6,
+	MENUPAGE_DISPLAY_SETTINGS = 6,
 	MENUPAGE_LANGUAGE_SETTINGS = 7,
 	MENUPAGE_CHOOSE_LOAD_SLOT = 8,
 	MENUPAGE_CHOOSE_DELETE_SLOT = 9,
@@ -235,11 +238,15 @@ enum eMenuScreen
 	MENUPAGE_KEYBOARD_CONTROLS = 55,
 	MENUPAGE_MOUSE_CONTROLS = 56,
 	MENUPAGE_MISSION_RETRY = 57,
-	MENUPAGE_58 = 58,
 #ifdef MENU_MAP
-	MENUPAGE_MAP = 59,
+	MENUPAGE_MAP,
 #endif
+	MENUPAGE_UNK, // 58 in game. Map page is added above, because last screen in CMenuScreens should always be empty to make CFO work
+#ifdef CUSTOM_FRONTEND_OPTIONS
+	MENUPAGES = 65 // for some room to add more screen
+#else
 	MENUPAGES
+#endif
 };
 
 enum eMenuAction
@@ -359,6 +366,13 @@ enum eMenuAction
 	MENUACTION_UNK112,
 	MENUACTION_REJECT_RETRY,
 	MENUACTION_UNK114,
+//#ifdef ANISOTROPIC_FILTERING
+//	MENUACTION_MIPMAPS,
+//	MENUACTION_TEXTURE_FILTERING,
+//#endif
+//#ifdef NO_ISLAND_LOADING
+//	MENUACTION_ISLANDLOADING,
+//#endif
 #ifdef CUSTOM_FRONTEND_OPTIONS
 	MENUACTION_TRIGGERFUNC
 #endif
@@ -447,7 +461,7 @@ struct BottomBarOption
 struct CMenuScreen
 {
 	char m_ScreenName[8];
-	int32 unk; // 2 on MENUPAGE_MULTIPLAYER_START, 1 on everywhere else
+	int32 unk; // 2 on MENUPAGE_MULTIPLAYER_START, 1 on everywhere else, 0 on unused.
 	int32 m_PreviousPage[2]; // eMenuScreen
 	int32 m_ParentEntry[2]; // row
 
@@ -532,6 +546,10 @@ public:
 	int32 m_nPrefsSubsystem;
 	int32 m_nSelectedScreenMode;
 #endif
+#ifdef MULTISAMPLING
+	static int8 m_nPrefsMSAALevel;
+	static int8 m_nDisplayMSAALevel;
+#endif
 
 	enum LANGUAGE
 	{
@@ -602,6 +620,24 @@ public:
 	void PrintMap();
 #endif
 
+#ifdef NO_ISLAND_LOADING
+	enum
+	{
+		ISLAND_LOADING_LOW = 0,
+		ISLAND_LOADING_MEDIUM,
+		ISLAND_LOADING_HIGH
+	};
+
+	static int8 m_DisplayIslandLoading;
+	static int8 m_PrefsIslandLoading;
+
+	#define ISLAND_LOADING_IS(p) if (CMenuManager::m_PrefsIslandLoading == CMenuManager::ISLAND_LOADING_##p)
+	#define ISLAND_LOADING_ISNT(p) if (CMenuManager::m_PrefsIslandLoading != CMenuManager::ISLAND_LOADING_##p)
+#else
+	#define ISLAND_LOADING_IS(p)
+	#define ISLAND_LOADING_ISNT(p)
+#endif
+
 public:
 	static void BuildStatLine(Const char *text, void *stat, bool itsFloat, void *stat2);
 	static void CentreMousePointer();
@@ -660,8 +696,6 @@ public:
 	void PageUpList(bool);
 	void PageDownList(bool);
 	int8 GetPreviousPageOption();
-	
-	// uint8 GetNumberOfMenuOptions();
 };
 
 #ifndef IMPROVED_VIDEOMODE
@@ -669,6 +703,6 @@ VALIDATE_SIZE(CMenuManager, 0x564);
 #endif
 
 extern CMenuManager FrontEndMenuManager;
-extern CMenuScreen aScreens[];
+extern CMenuScreen aScreens[MENUPAGES];
 
 #endif

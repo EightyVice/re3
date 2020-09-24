@@ -2,6 +2,7 @@
 #include "rpmatfx.h"
 #include "rphanim.h"
 #include "rpskin.h"
+#include "rtbmp.h"
 
 #include "main.h"
 #include "CdStream.h"
@@ -61,6 +62,8 @@
 #include "MemoryCard.h"
 #include "SceneEdit.h"
 #include "debugmenu.h"
+#include "Clock.h"
+#include "custompipes.h"
 
 GlobalScene Scene;
 
@@ -288,6 +291,28 @@ DoFade(void)
 	}
 }
 
+bool
+RwGrabScreen(RwCamera *camera, RwChar *filename)
+{
+	char temp[255];
+	RwImage *pImage = RsGrabScreen(camera);
+	bool result = true;
+
+	if (pImage == nil)
+		return false;
+
+	strcpy(temp, CFileMgr::GetRootDirName());
+	strcat(temp, filename);
+
+	if (RtBMPImageWrite(pImage, &temp[0]) == nil)
+		result = false;
+	RwImageDestroy(pImage);
+	return result;
+}
+
+#define TILE_WIDTH 576
+#define TILE_HEIGHT 432
+
 void
 DoRWStuffEndOfFrame(void)
 {
@@ -296,6 +321,20 @@ DoRWStuffEndOfFrame(void)
 	FlushObrsPrintfs();
 	RwCameraEndUpdate(Scene.camera);
 	RsCameraShowRaster(Scene.camera);
+#ifndef MASTER
+	char s[48];
+	if (CPad::GetPad(1)->GetLeftShockJustDown()) {
+		// try using both controllers for this thing... crazy bastards
+		if (CPad::GetPad(0)->GetRightStickY() > 0) {
+			sprintf(s, "screen%d%d.ras", CClock::ms_nGameClockHours, CClock::ms_nGameClockMinutes);
+			// TODO
+			//RtTileRender(Scene.camera, TILE_WIDTH * 2, TILE_HEIGHT * 2, TILE_WIDTH, TILE_HEIGHT, &NewTileRendererCB, nil, s);
+		} else {
+			sprintf(s, "screen%d%d.bmp", CClock::ms_nGameClockHours, CClock::ms_nGameClockMinutes);
+			RwGrabScreen(Scene.camera, s);
+		}
+	}
+#endif // !MASTER
 }
 
 static RwBool 
@@ -349,6 +388,9 @@ PluginAttach(void)
 		
 		return FALSE;
 	}
+#ifdef EXTENDED_PIPELINES
+	CustomPipes::CustomPipeRegister();
+#endif
 
 	return TRUE;
 }
@@ -362,7 +404,11 @@ Initialise3D(void *param)
 		DebugMenuInit();
 		DebugMenuPopulate();
 #endif // !DEBUGMENU
-		return CGame::InitialiseRenderWare();
+		bool ret = CGame::InitialiseRenderWare();
+#ifdef EXTENDED_PIPELINES
+		CustomPipes::CustomPipeInit();	// need Scene.world for this
+#endif
+		return ret;
 	}
 
 	return (FALSE);
@@ -371,6 +417,9 @@ Initialise3D(void *param)
 static void 
 Terminate3D(void)
 {
+#ifdef EXTENDED_PIPELINES
+	CustomPipes::CustomPipeShutdown();
+#endif
 	CGame::ShutdownRenderWare();
 #ifdef DEBUGMENU
 	DebugMenuShutdown();
@@ -816,7 +865,9 @@ RenderScene(void)
 	DefinedState();
 	CWaterLevel::RenderWater();
 	CRenderer::RenderFadingInEntities();
+#ifndef SQUEEZE_PERFORMANCE
 	CRenderer::RenderVehiclesButNotBoats();
+#endif
 	CWeather::RenderRainStreaks();
 }
 
@@ -1059,6 +1110,12 @@ Idle(void *arg)
 		tbEndTimer("PreRender");
 #endif
 
+#ifdef FIX_BUGS
+		// This has to be done BEFORE RwCameraBeginUpdate
+		RwCameraSetFarClipPlane(Scene.camera, CTimeCycle::GetFarClip());
+		RwCameraSetFogDistance(Scene.camera, CTimeCycle::GetFogStart());
+#endif
+
 		if(CWeather::LightningFlash && !CCullZones::CamNoRain()){
 			if(!DoRWStuffStartOfFrame_Horizon(255, 255, 255, 255, 255, 255, 255))
 				return;
@@ -1071,9 +1128,10 @@ Idle(void *arg)
 
 		DefinedState();
 
-		// BUG. This has to be done BEFORE RwCameraBeginUpdate
+#ifndef FIX_BUGS
 		RwCameraSetFarClipPlane(Scene.camera, CTimeCycle::GetFarClip());
 		RwCameraSetFogDistance(Scene.camera, CTimeCycle::GetFogStart());
+#endif
 
 #ifdef TIMEBARS
 		tbStartTimer(0, "RenderScene");
@@ -1082,6 +1140,11 @@ Idle(void *arg)
 #ifdef TIMEBARS
 		tbEndTimer("RenderScene");
 #endif
+
+#ifdef EXTENDED_PIPELINES
+		CustomPipes::EnvMapRender();
+#endif
+
 		RenderDebugShit();
 		RenderEffects();
 

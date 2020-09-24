@@ -562,17 +562,19 @@ RestoreForStartLoad()
 		ReadDataFromBufferPointer(_buf, TheCamera.GetMatrix().GetPosition().x);
 		ReadDataFromBufferPointer(_buf, TheCamera.GetMatrix().GetPosition().y);
 		ReadDataFromBufferPointer(_buf, TheCamera.GetMatrix().GetPosition().z);
-#ifndef NO_ISLAND_LOADING
-		CStreaming::RemoveUnusedBigBuildings(CGame::currLevel);
-		CStreaming::RemoveUnusedBuildings(CGame::currLevel);
-#endif
+		ISLAND_LOADING_IS(LOW)
+		{
+			CStreaming::RemoveUnusedBigBuildings(CGame::currLevel);
+			CStreaming::RemoveUnusedBuildings(CGame::currLevel);
+		}
 		CCollision::SortOutCollisionAfterLoad();
-#ifndef NO_ISLAND_LOADING
-		CStreaming::RequestBigBuildings(CGame::currLevel);
-		CStreaming::LoadAllRequestedModels(false);
-		CStreaming::HaveAllBigBuildingsLoaded(CGame::currLevel);
-		CGame::TidyUpMemory(true, false);
-#endif
+		ISLAND_LOADING_IS(LOW)
+		{
+			CStreaming::RequestBigBuildings(CGame::currLevel);
+			CStreaming::LoadAllRequestedModels(false);
+			CStreaming::HaveAllBigBuildingsLoaded(CGame::currLevel);
+			CGame::TidyUpMemory(true, false);
+		}
 		if (CloseFile(file)) {
 			return true;
 		} else {
