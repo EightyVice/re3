@@ -4,6 +4,7 @@ class CSpecialFX
 {
 public:
 	static bool bSnapShotActive;
+	static int32 SnapShotFrames;
 
 	static void Render(void);
 	static void Update(void);
@@ -56,6 +57,13 @@ public:
 	static void AddTrace(CVector*, CVector*);
 	static void Render(void);
 	static void Update(void);
+	
+//TODO(MIAMI)
+	static void AddTrace(CVector *, CVector *, float, unsigned int, unsigned char) {}
+	static void AddTrace(CVector *a, CVector *b, int32 weapontype, class CEntity *shooter)
+	{
+		AddTrace(a, b); //TODO: temp
+	}
 };
 
 enum
@@ -79,6 +87,7 @@ public:
 	RpMaterial *m_pMaterial;
 	uint16 m_nType;
 	bool m_bIsUsed;
+	bool m_bFindZOnNextPlacement;
 	uint32 m_nIdentifier;
 	RwRGBA m_Color;
 	uint16 m_nPulsePeriod;

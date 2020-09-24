@@ -14,6 +14,7 @@
 
 #define FEET_OFFSET	1.04f
 #define CHECK_NEARBY_THINGS_MAX_DIST	15.0f
+#define ENTER_CAR_MAX_DIST	30.0f
 
 class CAccident;
 class CObject;
@@ -358,6 +359,8 @@ enum eMoveState {
 	PEDMOVE_THROWN
 };
 
+extern float gfTommyFatness;
+
 class CVehicle;
 
 class CPed : public CPhysical
@@ -455,17 +458,17 @@ public:
 	uint32 bTurnedAroundOnAttractor : 1;
 
 	uint32 bHasAlreadyUsedAttractor : 1;
-	//uint32 b155_2
+	uint32 bHasAlreadyStoleACar : 1;
 	uint32 bCarPassenger : 1;
-	//uint32 b155_8
-	//uint32 b155_10
+	uint32 bFleeWhenStanding : 1;
+	uint32 bGotUpOfMyOwnAccord : 1;
 	uint32 bMiamiViceCop : 1;
 	uint32 bMoneyHasBeenGivenByScript : 1; //
 	uint32 bHasBeenPhotographed : 1;  //
 
 	uint32 bIsDrowning : 1;
 	uint32 bDrownsInWater : 1;
-	//uint32 b156_4
+	uint32 bWaitForLeaderToComeCloser : 1;
 	uint32 bHeldHostageInCar : 1;
 	uint32 bIsPlayerFriend : 1;
 	uint32 bHeadStuckInCollision : 1;
@@ -475,20 +478,20 @@ public:
 	uint32 bDontFight : 1;
 	uint32 bDoomAim : 1;
 	uint32 bCanBeShotInVehicle : 1;
-	//uint32 b157_8
+	uint32 bCanGiveUpSunbathing : 1;
 	uint32 bMakeFleeScream : 1;
 	uint32 bPushedAlongByCar : 1;
-	uint32 b157_40 : 1;
+	uint32 bRemoveMeWhenIGotIntoCar : 1;
 	uint32 bIgnoreThreatsBehindObjects : 1;
 
 	uint32 bNeverEverTargetThisPed : 1;
 	uint32 bCrouchWhenScared : 1;
 	uint32 bKnockedOffBike : 1;
 	uint32 b158_8 : 1;
-	uint32 b158_10 : 1;
+	uint32 bCollectBusFare : 1;
 	uint32 bBoughtIceCream : 1;
-	uint32 b158_40 : 1;
-	//uint32 b158_80
+	uint32 bDonePositionOutOfCollision : 1;
+	uint32 b158_80 : 1;
 
 	// our own flags
 	uint32 m_ped_flagI80 : 1; // KANGAROO_CHEAT define makes use of this as cheat toggle 
@@ -566,10 +569,9 @@ public:
 	bool bInVehicle;
 	float m_distanceToCountSeekDone;
 	float m_acceptableHeadingOffset;
+	CVehicle* m_vehicleInAccident;
 	CPedAttractor* m_attractor;
 	int32 m_positionInQueue;
-	CVehicle* m_vehicleInAccident;
-
 	bool bRunningToPhone;
 	int16 m_phoneId;
 	eCrimeType m_crimeToReportOnPhone;
@@ -581,7 +583,7 @@ public:
 	float m_fleeFromPosY;
 	CEntity *m_fleeFrom;
 	uint32 m_fleeTimer;
-	CEntity* pThreatEx; // TODO(Miami): What is this?
+	CEntity* m_threatEx; // TODO(Miami): What is this?
 	CEntity* m_collidingEntityWhileFleeing;
 	uint32 m_collidingThingTimer;
 	CEntity *m_pCollidingEntity;
@@ -635,14 +637,16 @@ public:
 	float m_attachRotStep;
 	uint32 m_attachWepAmmo;
 	uint32 m_threatFlags;
-	uint32 m_threatCheck;
-	uint32 m_lastThreatCheck;
+	uint32 m_threatCheckTimer;
+	uint32 m_threatCheckInterval;
 	uint32 m_delayedSoundID;
 	uint32 m_delayedSoundTimer;
 	uint32 m_lastSoundStart;
 	uint32 m_soundStart;
 	uint16 m_lastQueuedSound;
 	uint16 m_queuedSound;
+	bool m_canTalk;
+	int32 m_lastComment;
 	CVector m_vecSeekPosEx; // used for OBJECTIVE_GUARD_SPOT
 	float m_distanceToCountSeekDoneEx; // used for OBJECTIVE_GUARD_SPOT
 
@@ -805,7 +809,6 @@ public:
 	void GetNearestDoor(CVehicle*, CVector&);
 	bool GetNearestPassengerDoor(CVehicle*, CVector&);
 	int GetNextPointOnRoute(void);
-	uint8 GetPedRadioCategory(uint32);
 	int GetWeaponSlot(eWeaponType);
 	bool CanWeRunAndFireWithWeapon(void);
 	void GoToNearestDoor(CVehicle*);
@@ -830,6 +833,7 @@ public:
 	void ReactToPointGun(CEntity*);
 	void SeekCar(void);
 	bool PositionPedOutOfCollision(void);
+	bool PositionAnyPedOutOfCollision(void);
 	bool RunToReportCrime(eCrimeType);
 	bool PlacePedOnDryLand(void);
 	bool PossiblyFindBetterPosToSeekCar(CVector*, CVehicle*);
@@ -864,6 +868,7 @@ public:
 	void DriveVehicle();
 	void PositionAttachedPed();
 	bool CanUseTorsoWhenLooking();
+	void ScanForDelayedResponseThreats();
 
 	// Static methods
 	static CVector GetLocalPositionToOpenCarDoor(CVehicle *veh, uint32 component, float offset);
@@ -903,6 +908,9 @@ public:
 	static void RestoreHeadingRateCB(CAnimBlendAssociation *assoc, void *arg);
 	static void PedSetQuickDraggedOutCarPositionCB(CAnimBlendAssociation *assoc, void *arg);
 	static void PedSetDraggedOutCarPositionCB(CAnimBlendAssociation *assoc, void *arg);
+	static void DeleteSunbatheIdleAnimCB(CAnimBlendAssociation *assoc, void *arg);
+	static void PedSetPreviousStateCB(CAnimBlendAssociation *assoc, void *arg);
+	static void PedAnimShuffleCB(CAnimBlendAssociation *assoc, void *arg);
 
 	bool IsPlayer(void);
 	bool IsFemale(void) { return m_nPedType == PEDTYPE_CIVFEMALE || m_nPedType == PEDTYPE_PROSTITUTE; }
@@ -911,6 +919,7 @@ public:
 	bool IsPedInControl(void);
 	bool CanPedDriveOff(void);
 	bool CanBeDeleted(void);
+	bool CanBeDeletedEvenInVehicle(void);
 	bool CanStrafeOrMouseControl(void);
 	bool CanPedReturnToState(void);
 	void SetMoveState(eMoveState);
@@ -956,6 +965,8 @@ public:
 	void Dress(void);
 	int32 KillCharOnFootMelee(CVector&, CVector&, CVector&);
 	int32 KillCharOnFootArmed(CVector&, CVector&, CVector&);
+	void SetLook(CEntity* to);
+	void SetLook(float direction);
 
 	bool HasWeaponSlot(uint8 slot) { return m_weapons[slot].m_eWeaponType != WEAPONTYPE_UNARMED; }
 	CWeapon& GetWeapon(uint8 slot) { return m_weapons[slot]; }

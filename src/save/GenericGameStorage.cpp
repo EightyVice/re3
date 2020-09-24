@@ -37,9 +37,11 @@
 #include "Weather.h"
 #include "World.h"
 #include "Zones.h"
+#include "Timecycle.h"
+#include "Fluff.h"
 
 #define BLOCK_COUNT 20
-#define SIZE_OF_SIMPLEVARS 0xBC
+#define SIZE_OF_SIMPLEVARS 0xFC
 
 const uint32 SIZE_OF_ONE_GAME_IN_BYTES = 201729;
 
@@ -56,7 +58,7 @@ wchar SlotSaveDate[SLOT_COUNT][70];
 int CheckSum;
 eLevelName m_LevelToLoad;
 char SaveFileNameJustSaved[260];
-int Slots[SLOT_COUNT+1];
+int Slots[SLOT_COUNT];
 CDate CompileDateAndTime;
 
 bool b_FoundRecentSavedGameWantToLoad;
@@ -64,6 +66,28 @@ bool JustLoadedDontFadeInYet;
 bool StillToFadeOut;
 uint32 TimeStartedCountingForFade;
 uint32 TimeToStayFadedBeforeFadeOut = 1750;
+
+uint32 RadioStationPosition[NUM_RADIOS];
+
+void
+InitRadioStationPositionList()
+{
+	for (int i = 0; i < NUM_RADIOS; i++)
+		RadioStationPosition[i] = 0;
+}
+
+uint32
+GetSavedRadioStationPosition(int32 station)
+{
+	return RadioStationPosition[station];
+}
+
+void
+PopulateRadioStationPositionList()
+{
+	for (int i = 0; i < NUM_RADIOS; i++)
+		RadioStationPosition[i] = DMAudio.GetRadioPosition(i);
+}
 
 #define ReadDataFromBufferPointer(buf, to) memcpy(&to, buf, sizeof(to)); buf += align4bytes(sizeof(to));
 #define WriteDataToBufferPointer(buf, from) memcpy(buf, &from, sizeof(from)); buf += align4bytes(sizeof(from));
@@ -187,6 +211,16 @@ GenericSave(int file)
 	WriteDataToBufferPointer(buf, TheCamera.CarZoomIndicator);
 	WriteDataToBufferPointer(buf, TheCamera.PedZoomIndicator);
 #endif
+	WriteDataToBufferPointer(buf, CGame::currArea);
+	WriteDataToBufferPointer(buf, CVehicle::bAllTaxisHaveNitro);
+	// TODO(Miami): Pad invert Y
+	bool invertY = 0;
+	WriteDataToBufferPointer(buf, invertY);
+	WriteDataToBufferPointer(buf, CTimeCycle::m_ExtraColour);
+	WriteDataToBufferPointer(buf, CTimeCycle::m_bExtraColourOn);
+	WriteDataToBufferPointer(buf, CTimeCycle::m_ExtraColourInter);
+	PopulateRadioStationPositionList();
+	WriteDataToBufferPointer(buf, RadioStationPosition);
 	assert(buf - work_buff == SIZE_OF_SIMPLEVARS);
 
 	// Save scripts, block is nested within the same block as simple vars for some reason
@@ -217,6 +251,7 @@ GenericSave(int file)
 	WriteSaveDataBlock(CTheCarGenerators::SaveAllCarGenerators);
 	WriteSaveDataBlock(CParticleObject::SaveParticle);
 	WriteSaveDataBlock(cAudioScriptObject::SaveAllAudioScriptObjects);
+	WriteSaveDataBlock(CScriptPaths::Save);
 	WriteSaveDataBlock(CWorld::Players[CWorld::PlayerInFocus].SavePlayerInfo);
 	WriteSaveDataBlock(CStats::SaveStats);
 	WriteSaveDataBlock(CSetPieces::Save);
@@ -315,6 +350,15 @@ GenericLoad()
 	ReadDataFromBufferPointer(buf, TheCamera.CarZoomIndicator);
 	ReadDataFromBufferPointer(buf, TheCamera.PedZoomIndicator);
 #endif
+	ReadDataFromBufferPointer(buf, CGame::currArea);
+	ReadDataFromBufferPointer(buf, CVehicle::bAllTaxisHaveNitro);
+	// TODO(Miami): Pad invert Y
+	bool invertY = 0;
+	ReadDataFromBufferPointer(buf, invertY);
+	ReadDataFromBufferPointer(buf, CTimeCycle::m_ExtraColour);
+	ReadDataFromBufferPointer(buf, CTimeCycle::m_bExtraColourOn);
+	ReadDataFromBufferPointer(buf, CTimeCycle::m_ExtraColourInter);
+	ReadDataFromBufferPointer(buf, RadioStationPosition);
 	assert(buf - work_buff == SIZE_OF_SIMPLEVARS);
 #ifdef MISSION_REPLAY
 	WaitForSave = 0;
@@ -359,6 +403,8 @@ GenericLoad()
 	ReadDataFromBlock("Loading Particles \n", CParticleObject::LoadParticle);
 	LoadSaveDataBlock();
 	ReadDataFromBlock("Loading AudioScript Objects \n", cAudioScriptObject::LoadAllAudioScriptObjects);
+	LoadSaveDataBlock();
+	ReadDataFromBlock("Loading ScriptPaths \n", CScriptPaths::Load);
 	LoadSaveDataBlock();
 	ReadDataFromBlock("Loading Player Info \n", CWorld::Players[CWorld::PlayerInFocus].LoadPlayerInfo);
 	LoadSaveDataBlock();

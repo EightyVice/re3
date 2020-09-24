@@ -12,17 +12,38 @@
 #include "Weather.h"
 #include "PedAttractor.h"
 #include "Object.h"
+#include "CarCtrl.h"
 
+#ifndef _WIN32
+#include <float.h>
+#endif
+
+// --MIAMI: Done
 CCivilianPed::CCivilianPed(ePedType pedtype, uint32 mi) : CPed(pedtype)
 {
 	SetModelIndex(mi);
 	for (int i = 0; i < ARRAY_SIZE(m_nearPeds); i++) {
 		m_nearPeds[i] = nil;
 	}
+	m_bLookForVacantCars = false;
+	if (pedtype == PEDTYPE_CRIMINAL)
+		m_bLookForVacantCars = true;
+
+	m_nLookForVacantCarsCounter = 0;
+	m_bJustStoleACar = false;
+	m_bStealCarEvenIfThereIsSomeoneInIt = false;
+	for (int i = 0; i < ARRAY_SIZE(m_nStealWishList); i++) {
+		uint32 randomCarModel = CGeneral::GetRandomNumberInRange(MI_LANDSTAL, MI_LAST_VEHICLE + 1);
+		if (CModelInfo::IsCarModel(randomCarModel) || CModelInfo::IsBikeModel(randomCarModel))
+			m_nStealWishList[i] = randomCarModel;
+		else
+			m_nStealWishList[i] = MI_CHEETAH;
+	}
 	m_nAttractorCycleState = 0;
 	m_bAttractorUnk = (CGeneral::GetRandomNumberInRange(0.0f, 1.0f) < 1.25f);
 }
 
+// --MIAMI: Done
 void
 CCivilianPed::CivilianAI(void)
 {
@@ -39,7 +60,13 @@ CCivilianPed::CivilianAI(void)
 		if (CTimer::GetTimeInMilliseconds() <= m_lookTimer)
 			return;
 
-		uint32 closestThreatFlag = ScanForThreats();
+		ScanForDelayedResponseThreats();
+		if (!m_threatFlags || CTimer::GetTimeInMilliseconds() <= m_threatCheckTimer)
+			return;
+		CheckThreatValidity();
+		uint32 closestThreatFlag = m_threatFlags;
+		m_threatFlags = 0;
+		m_threatCheckTimer = 0;
 		if (closestThreatFlag == PED_FLAG_EXPLOSION) {
 			float angleToFace = CGeneral::GetRadianAngleBetweenPoints(
 				m_eventOrThreat.x,  m_eventOrThreat.y,
@@ -53,18 +80,30 @@ CCivilianPed::CivilianAI(void)
 		}
 		return;
 	}
-	uint32 closestThreatFlag = ScanForThreats();
+	ScanForDelayedResponseThreats();
+	if (!m_threatFlags || CTimer::GetTimeInMilliseconds() <= m_threatCheckTimer)
+		return;
+	CheckThreatValidity();
+	uint32 closestThreatFlag = m_threatFlags;
+	m_threatFlags = 0;
+	m_threatCheckTimer = 0;
 	if (closestThreatFlag == PED_FLAG_GUN) {
 		if (!m_threatEntity || !m_threatEntity->IsPed())
 			return;
 
 		CPed *threatPed = (CPed*)m_threatEntity;
 		float threatDistSqr = (m_threatEntity->GetPosition() - GetPosition()).MagnitudeSqr2D();
+		if (CharCreatedBy == MISSION_CHAR && bCrouchWhenScared) {
+			SetDuck(10000, true);
+			SetLookFlag(m_threatEntity, false);
+			SetLookTimer(500);
+			return;
+		}
 		if (m_pedStats->m_fear <= m_pedStats->m_lawfulness) {
 			if (m_pedStats->m_temper <= m_pedStats->m_fear) {
 				if (!threatPed->IsPlayer() || !RunToReportCrime(CRIME_POSSESSION_GUN)) {
-					if (threatDistSqr < sq(10.0f)) {
-						Say(SOUND_PED_FLEE_SPRINT);
+					if (threatDistSqr < sq(30.0f)) {
+						bMakeFleeScream = true;
 						SetFindPathAndFlee(m_threatEntity, 10000);
 					} else {
 						SetFindPathAndFlee(m_threatEntity->GetPosition(), 5000, true);
@@ -74,13 +113,16 @@ CCivilianPed::CivilianAI(void)
 				SetFindPathAndFlee(m_threatEntity, 5000);
 				if (threatDistSqr < sq(20.0f)) {
 					SetMoveState(PEDMOVE_RUN);
-					Say(SOUND_PED_FLEE_SPRINT);
+					bMakeFleeScream = true;
 				} else {
 					SetMoveState(PEDMOVE_WALK);
 				}
+			} else if (threatPed->IsPlayer() && IsGangMember() && b158_80) {
+				SetObjective(OBJECTIVE_KILL_CHAR_ON_FOOT, m_threatEntity);
+
 			} else if (threatPed->IsPlayer() && FindPlayerPed()->m_pWanted->m_CurrentCops != 0)  {
 				SetFindPathAndFlee(m_threatEntity, 5000);
-				if (threatDistSqr < sq(10.0f)) {
+				if (threatDistSqr < sq(30.0f)) {
 					SetMoveState(PEDMOVE_RUN);
 				} else {
 					SetMoveState(PEDMOVE_WALK);
@@ -89,12 +131,12 @@ CCivilianPed::CivilianAI(void)
 				SetObjective(OBJECTIVE_KILL_CHAR_ON_FOOT, m_threatEntity);
 			}
 		} else {
-			if (threatDistSqr < sq(10.0f)) {
-				Say(SOUND_PED_FLEE_SPRINT);
+			if (threatDistSqr < sq(30.0f)) {
+				bMakeFleeScream = true;
 				SetFindPathAndFlee(m_threatEntity, 10000);
 				SetMoveState(PEDMOVE_SPRINT);
 			} else {
-				Say(SOUND_PED_FLEE_SPRINT);
+				bMakeFleeScream = false;
 				SetFindPathAndFlee(m_threatEntity, 5000);
 				SetMoveState(PEDMOVE_RUN);
 			}
@@ -103,7 +145,10 @@ CCivilianPed::CivilianAI(void)
 		SetLookTimer(500);
 	} else if (closestThreatFlag == PED_FLAG_DEADPEDS) {
 		float eventDistSqr = (m_pEventEntity->GetPosition() - GetPosition()).MagnitudeSqr2D();
-		if (((CPed*)m_pEventEntity)->bIsDrowning || IsGangMember() && m_nPedType == ((CPed*)m_pEventEntity)->m_nPedType) {
+		if (CharCreatedBy == MISSION_CHAR && bCrouchWhenScared && eventDistSqr < sq(5.0f)) {
+			SetDuck(10000, true);
+
+		} else if (((CPed*)m_pEventEntity)->bIsDrowning || IsGangMember() && m_nPedType == ((CPed*)m_pEventEntity)->m_nPedType) {
 			if (eventDistSqr < sq(5.0f)) {
 				SetFindPathAndFlee(m_pEventEntity, 2000);
 				SetMoveState(PEDMOVE_RUN);
@@ -128,8 +173,11 @@ CCivilianPed::CivilianAI(void)
 	} else if (closestThreatFlag == PED_FLAG_EXPLOSION) {
 		CVector2D eventDistVec = m_eventOrThreat - GetPosition();
 		float eventDistSqr = eventDistVec.MagnitudeSqr();
-		if (eventDistSqr < sq(20.0f)) {
-			Say(SOUND_PED_FLEE_SPRINT);
+		if (CharCreatedBy == MISSION_CHAR && bCrouchWhenScared && eventDistSqr < sq(20.0f)) {
+			SetDuck(10000, true);
+
+		} else if (eventDistSqr < sq(20.0f)) {
+			bMakeFleeScream = true;
 			SetFlee(m_eventOrThreat, 2000);
 			float angleToFace = CGeneral::GetRadianAngleBetweenPoints(
 				m_eventOrThreat.x, m_eventOrThreat.y,
@@ -154,8 +202,11 @@ CCivilianPed::CivilianAI(void)
 		if (m_threatEntity && m_threatEntity->IsPed()) {
 			CPed *threatPed = (CPed*)m_threatEntity;
 			if (m_pedStats->m_fear <= 100 - threatPed->m_pedStats->m_temper && threatPed->m_nPedType != PEDTYPE_COP) {
-				if (threatPed->GetWeapon(m_currentWeapon).IsTypeMelee() || !GetWeapon()->IsTypeMelee()) {
-					if (threatPed->IsPlayer() && FindPlayerPed()->m_pWanted->m_CurrentCops != 0) {
+				if (threatPed->GetWeapon()->IsTypeMelee() || !GetWeapon()->IsTypeMelee()) {
+					if (threatPed->IsPlayer() && IsGangMember() && b158_80) {
+						SetObjective(OBJECTIVE_KILL_CHAR_ON_FOOT, m_threatEntity);
+
+					} else if (threatPed->IsPlayer() && FindPlayerPed()->m_pWanted->m_CurrentCops != 0) {
 						if (m_objective == OBJECTIVE_KILL_CHAR_ON_FOOT || m_objective == OBJECTIVE_KILL_CHAR_ANY_MEANS) {
 							SetFindPathAndFlee(m_threatEntity, 10000);
 						}
@@ -353,7 +404,7 @@ CCivilianPed::ProcessControl(void)
 		CivilianAI();
 
 	if (CharCreatedBy == RANDOM_CHAR) {
-		// TODO(Miami): EnterVacantNearbyCars();
+		EnterVacantNearbyCars();
 		UseNearbyAttractors();
 	}
 
@@ -449,6 +500,86 @@ bool CCivilianPed::IsAttractedTo(int8 type)
 	case ATTRACTOR_PIZZA: return true;
 	case ATTRACTOR_SHELTER: return CWeather::Rain >= 0.2f;
 	case ATTRACTOR_ICECREAM: return false;
+	}
+	return false;
+}
+
+// --MIAMI: Done
+void
+CCivilianPed::EnterVacantNearbyCars(void)
+{
+	if (!m_bLookForVacantCars)
+		return;
+
+	if (m_bJustStoleACar && bInVehicle && m_carInObjective == m_pMyVehicle) {
+		m_bJustStoleACar = false;
+		m_pMyVehicle->SetStatus(STATUS_PHYSICS);
+		m_pMyVehicle->AutoPilot.m_nCarMission = MISSION_CRUISE;
+		m_pMyVehicle->AutoPilot.m_nCruiseSpeed = 10;
+		m_pMyVehicle->bEngineOn = true;
+
+	} else if (!bHasAlreadyStoleACar) {
+		if (m_nLookForVacantCarsCounter == 8) {
+			m_nLookForVacantCarsCounter = 0;
+			if (IsPedInControl() && m_objective == OBJECTIVE_NONE) {
+
+				CVehicle *foundCar = nil;
+				float closestDist = FLT_MAX;
+				int minX = CWorld::GetSectorIndexX(GetPosition().x - 10.0f);
+				if (minX < 0) minX = 0;
+				int minY = CWorld::GetSectorIndexY(GetPosition().y - 10.0f);
+				if (minY < 0) minY = 0;
+				int maxX = CWorld::GetSectorIndexX(GetPosition().x + 10.0f);
+				if (maxX > NUMSECTORS_X - 1) maxX = NUMSECTORS_X - 1;
+				int maxY = CWorld::GetSectorIndexY(GetPosition().y + 10.0f);
+				if (maxY > NUMSECTORS_Y - 1) maxY = NUMSECTORS_Y - 1;
+
+				for (int curY = minY; curY <= maxY; curY++) {
+					for (int curX = minX; curX <= maxX; curX++) {
+						CSector* sector = CWorld::GetSector(curX, curY);
+						for (CPtrNode* node = sector->m_lists[ENTITYLIST_VEHICLES].first; node; node = node->next) {
+							CVehicle* veh = (CVehicle*)node->item;
+							if (veh && veh->IsCar()) {
+
+								// Looks like PARKED_VEHICLE condition isn't there in Mobile.
+								if (veh->VehicleCreatedBy == RANDOM_VEHICLE || veh->VehicleCreatedBy == PARKED_VEHICLE) {
+									if (IsOnStealWishList(veh->GetModelIndex()) && !veh->IsLawEnforcementVehicle()
+										&& (m_bStealCarEvenIfThereIsSomeoneInIt || !veh->pDriver && !veh->m_nNumPassengers)
+										&& !veh->m_nNumGettingIn && !veh->m_nGettingInFlags && !veh->m_nGettingOutFlags
+										&& !veh->m_pCarFire && veh->m_fHealth > 800.0f
+										&& !veh->IsUpsideDown() && !veh->IsOnItsSide() && veh->CanPedEnterCar()) {
+										float dist = (GetPosition() - veh->GetPosition()).MagnitudeSqr();
+										if (dist < sq(10.0f) && dist < closestDist && veh->IsClearToDriveAway()) {
+											foundCar = veh;
+											closestDist = dist;
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+				if (foundCar) {
+					m_bJustStoleACar = true;
+					bHasAlreadyStoleACar = true;
+					CCarCtrl::JoinCarWithRoadSystem(foundCar);
+					SetObjective(OBJECTIVE_ENTER_CAR_AS_DRIVER, foundCar);
+					SetObjectiveTimer(10000);
+				}
+			}
+		} else {
+			++m_nLookForVacantCarsCounter;
+		}
+	}
+}
+
+bool
+CCivilianPed::IsOnStealWishList(int32 model)
+{
+	for (int i = 0; i < ARRAY_SIZE(m_nStealWishList); i++) {
+		if (model == m_nStealWishList[i]) {
+			return true;
+		}
 	}
 	return false;
 }

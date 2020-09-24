@@ -86,7 +86,7 @@ cAudioManager::Terminate()
 		m_sAudioScriptObjectManager.m_nScriptObjectEntityTotal = 0;
 		PreTerminateGameSpecificShutdown();
 
-		for (uint32 i = 0; i < MAX_SAMPLEBANKS; i++) {
+		for (uint32 i = 0; i < MAX_SFX_BANKS; i++) {
 			if (SampleManager.IsSampleBankLoaded(i))
 				SampleManager.UnloadSampleBank(i);
 		}
@@ -217,6 +217,12 @@ cAudioManager::PlayOneShot(int32 index, int16 sound, float vol)
 }
 
 void
+cAudioManager::SetMP3BoostVolume(uint8 volume) const
+{
+	SampleManager.SetMP3BoostVolume(volume);
+}
+
+void
 cAudioManager::SetEffectsMasterVolume(uint8 volume) const
 {
 	SampleManager.SetEffectsMasterVolume(volume);
@@ -337,6 +343,15 @@ cAudioManager::GetCurrent3DProviderIndex() const
 }
 
 int8
+cAudioManager::AutoDetect3DProviders() const
+{
+	if (m_bIsInitialised)
+		return SampleManager.AutoDetect3DProviders();
+
+	return -1;
+}
+
+int8
 cAudioManager::SetCurrent3DProvider(uint8 which)
 {
 	if (!m_bIsInitialised)
@@ -420,6 +435,7 @@ cAudioManager::IsAudioInitialised() const
 void
 cAudioManager::ServiceSoundEffects()
 {
+	field_5554++;
 	m_bFifthFrameFlag = (m_FrameCounter++ % 5) == 0;
 	if (m_nUserPause && !m_nPreviousUserPause) {
 		for (int32 i = 0; i < allChannels; i++)
@@ -918,7 +934,7 @@ cAudioManager::ClearActiveSamples()
 		m_asActiveSamples[i].m_nEntityIndex = AEHANDLE_NONE;
 		m_asActiveSamples[i].m_nCounter = 0;
 		m_asActiveSamples[i].m_nSampleIndex = NO_SAMPLE;
-		m_asActiveSamples[i].m_nBankIndex = SAMPLEBANK_INVALID;
+		m_asActiveSamples[i].m_nBankIndex = INVALID_SFX_BANK;
 		m_asActiveSamples[i].m_bIs2D = false;
 		m_asActiveSamples[i].m_nReleasingVolumeModificator = 5;
 		m_asActiveSamples[i].m_nFrequency = 0;

@@ -3,6 +3,7 @@
 #include "audio_enums.h"
 #include "AudioCollision.h"
 #include "PoliceRadio.h"
+#include "VehicleModelInfo.h"
 
 class tSound
 {
@@ -143,6 +144,7 @@ public:
 class cVehicleParams
 {
 public:
+	eVehicleType m_VehicleType;
 	bool m_bDistanceCalculated;
 	float m_fDistance;
 	CVehicle *m_pVehicle;
@@ -196,9 +198,9 @@ public:
 	cAudioScriptObjectManager m_sAudioScriptObjectManager;
 
 	// miami
-	uint8 field_4B30;
-	uint8 m_bPlayerMood;
-	uint32 field_4B34;
+	uint8 m_bIsPlayerShutUp;
+	uint8 m_nPlayerMood;
+	uint32 m_nPlayerMoodTimer;
 	uint8 field_rest[4];
 	uint8 field_4B3C;
 
@@ -269,6 +271,7 @@ public:
 	char *Get3DProviderName(uint8 id) const;
 	uint8 GetCDAudioDriveLetter() const;
 	int8 GetCurrent3DProviderIndex() const;
+	int8 AutoDetect3DProviders() const;
 	float GetCollisionLoopingRatio(uint32 a, uint32 b, float c) const; // not used
 	float GetCollisionOneShotRatio(int32 a, float b) const;
 	float GetCollisionRatio(float a, float b, float c, float d) const;
@@ -344,7 +347,7 @@ public:
 	void ProcessPedOneShots(cPedParams *params);
 	void ProcessPhysical(int32 id);
 	void ProcessPlane(cVehicleParams *params);
-	void ProcessPlayersVehicleEngine(cVehicleParams *params, CAutomobile *automobile);
+	void ProcessPlayersVehicleEngine(cVehicleParams *params, CVehicle* veh);
 	void ProcessProjectiles();
 	void ProcessRainOnVehicle(cVehicleParams *params);
 	void ProcessReverb() const;
@@ -357,6 +360,7 @@ public:
 	void ProcessVehicle(CVehicle *vehicle);
 	bool ProcessVehicleDoors(cVehicleParams *params);
 	void ProcessVehicleEngine(cVehicleParams *params);
+	void UpdateGasPedalAudio(CVehicle* veh, int vehType);
 	void ProcessVehicleHorn(cVehicleParams *params);
 	void ProcessVehicleOneShots(cVehicleParams *params);
 	bool ProcessVehicleReverseWarning(cVehicleParams *params);
@@ -386,6 +390,7 @@ public:
 	void SetDynamicAcousticModelingStatus(uint8 status);
 	void SetEffectsFadeVol(uint8 volume) const;
 	void SetEffectsMasterVolume(uint8 volume) const;
+	void SetMP3BoostVolume(uint8 volume) const;
 	void SetEntityStatus(int32 id, uint8 status);
 	uint32 SetLoopingCollisionRequestedSfxFreqAndGetVol(const cAudioCollision &audioCollision);
 	void SetMissionAudioLocation(uint8 slot, float x, float y, float z);
@@ -408,11 +413,14 @@ public:
 	void Terminate();
 	void TranslateEntity(Const CVector *v1, CVector *v2) const;
 
-	void UpdateGasPedalAudio(CAutomobile *automobile);
 	void UpdateReflections();
 	bool UsesReverseWarning(int32 model) const;
 	bool UsesSiren(int32 model) const;
 	bool UsesSirenSwitching(int32 model) const;
+
+	CVehicle *FindVehicleOfPlayer();
+	void SetPedTalkingStatus(CPed *ped, uint8 status);
+	void SetPlayersMood(uint8 mood, int32 time);
 
 #ifdef GTA_PC
 	// only used in pc

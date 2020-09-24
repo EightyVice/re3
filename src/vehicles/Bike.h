@@ -77,7 +77,7 @@ public:
 	int16 m_doingBurnout;
 	float m_fTireTemperature;
 	float m_fBrakeDestabilization;
-	uint32 field_490;
+	float m_fVelocityChangeForAudio;
 	float m_fFireBlowUpTimer;
 	CPhysical *m_aGroundPhysical[4];
 	CVector m_aGroundOffset[4];
@@ -134,7 +134,23 @@ public:
 	void ReduceHornCounter(void);
 };
 
+// These functions and function names are made up
+
 inline int8 GetBikeDoorFlag(int32 carnode) {
+	switch (carnode) {
+	case CAR_DOOR_RR:
+	case CAR_DOOR_LR:
+		return CAR_DOOR_FLAG_RR | CAR_DOOR_FLAG_LR;
+	case CAR_DOOR_RF:
+	case CAR_DOOR_LF:
+		return CAR_DOOR_FLAG_RF | CAR_DOOR_FLAG_LF;
+	default:
+		return CAR_DOOR_FLAG_UNKNOWN;
+	}
+}
+
+// for m_nGettingOutFlags
+inline int8 GetBikeDoorFlagInclJumpInFromFront(int32 carnode) {
 	switch (carnode) {
 		case CAR_DOOR_RR:
 		case CAR_DOOR_LR:

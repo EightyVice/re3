@@ -185,6 +185,22 @@ psCameraShowRaster(RwCamera *camera)
 	return;
 }
 
+/*
+ *****************************************************************************
+ */
+RwImage *
+psGrabScreen(RwCamera *pCamera)
+{
+#ifndef LIBRW
+	RwRaster *pRaster = RwCameraGetRaster(pCamera);
+	if (RwImage *pImage = RwImageCreate(pRaster->width, pRaster->height, 32)) {
+		RwImageAllocatePixels(pImage);
+		RwImageSetFromRaster(pImage, pRaster);
+		return pImage;
+	}
+#endif
+	return nil;
+}
 
 /*
  *****************************************************************************
@@ -1390,7 +1406,7 @@ WinMain(HINSTANCE instance,
 	RwChar** argv;
 	SystemParametersInfo(SPI_SETFOREGROUNDLOCKTIMEOUT, 0, nil, SPIF_SENDCHANGE);
 
-#if 0
+#if 1
 	// TODO: make this an option somewhere
 	AllocConsole();
 	freopen("CONIN$", "r", stdin);

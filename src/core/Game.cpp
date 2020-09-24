@@ -91,6 +91,7 @@
 #include "Ropes.h"
 #include "WindModifiers.h"
 #include "postfx.h"
+#include "custompipes.h"
 
 eLevelName CGame::currLevel;
 int32 CGame::currArea;
@@ -108,6 +109,7 @@ bool CGame::japaneseGame = false;
 
 int gameTxdSlot;
 
+// --MIAMI: File done
 
 bool DoRWStuffStartOfFrame(int16 TopRed, int16 TopGreen, int16 TopBlue, int16 BottomRed, int16 BottomGreen, int16 BottomBlue, int16 Alpha);
 void DoRWStuffEndOfFrame(void);
@@ -152,7 +154,11 @@ CGame::InitialiseOnceBeforeRW(void)
 {
 	CFileMgr::Initialise();
 	CdStreamInit(MAX_CDCHANNELS);
-	ValidateVersion();
+	debug("size of matrix %d\n", sizeof(CMatrix));
+	debug("size of placeable %d\n", sizeof(CPlaceable));
+	debug("size of entity %d\n", sizeof(CEntity));
+	debug("size of building %d\n", sizeof(CBuilding));
+	debug("size of dummy %d\n", sizeof(CDummy));
 #ifdef EXTENDED_COLOURFILTER
 	CPostFX::InitOnce();
 #endif
@@ -171,6 +177,7 @@ void ReplaceAtomicPipeCallback();
 bool
 CGame::InitialiseRenderWare(void)
 {
+	ValidateVersion();
 #ifdef USE_TEXTURE_POOL
 	_TexturePoolsInitialise();
 #endif
@@ -236,7 +243,6 @@ CGame::InitialiseRenderWare(void)
 
 void CGame::ShutdownRenderWare(void)
 {
-	CMBlur::MotionBlurClose();
 	DestroySplashScreen();
 	CHud::Shutdown();
 	CFont::Shutdown();
@@ -292,11 +298,6 @@ bool CGame::InitialiseOnceAfterRW(void)
 	DMAudio.SetEffectsMasterVolume(FrontEndMenuManager.m_PrefsSfxVolume);
 	DMAudio.SetEffectsFadeVol(127);
 	DMAudio.SetMusicFadeVol(127);
-	CWorld::Players[0].SetPlayerSkin(FrontEndMenuManager.m_PrefsSkinFile);
-
-#ifdef CUSTOM_FRONTEND_OPTIONS
-	CustomFrontendOptionsPopulate();
-#endif
 	return true;
 }
 
@@ -314,7 +315,11 @@ bool CGame::Initialise(const char* datFile)
 	strcpy(aDatFile, datFile);
 	CPools::Initialise();
 	CIniFile::LoadIniFile();
+#ifdef USE_TEXTURE_POOL
+	_TexturePoolsUnknown(false);
+#endif
 	currLevel = LEVEL_BEACH;
+	currArea = AREA_MAIN_MAP;
 	LoadingScreen("Loading the Game", "Loading generic textures", GetRandomSplashScreen());
 	gameTxdSlot = CTxdStore::AddTxdSlot("generic");
 	CTxdStore::Create(gameTxdSlot);
@@ -332,6 +337,7 @@ bool CGame::Initialise(const char* datFile)
 	CDebug::DebugInitTextBuffer();
 	ThePaths.Init();
 	ThePaths.AllocatePathFindInfoMem(4500);
+	CScriptPaths::Init();
 	CWeather::Init();
 	CCullZones::Init();
 	COcclusion::Init();
@@ -360,11 +366,16 @@ bool CGame::Initialise(const char* datFile)
 	CdStreamAddImage("MODELS\\GTA3.IMG");
 	CFileLoader::LoadLevel("DATA\\DEFAULT.DAT");
 	CFileLoader::LoadLevel(datFile);
+#ifdef EXTENDED_PIPELINES
+	// for generic fallback
+	CustomPipes::SetTxdFindCallback();
+#endif
+	LoadingScreen("Loading the Game", "Add Particles", nil);
 	CWorld::AddParticles();
 	CVehicleModelInfo::LoadVehicleColours();
 	CVehicleModelInfo::LoadEnvironmentMaps();
 	CTheZones::PostZoneCreation();
-	LoadingScreen("Loading the Game", "Setup paths", GetRandomSplashScreen());
+	LoadingScreen("Loading the Game", "Setup paths", nil);
 	ThePaths.PreparePathData();
 	for (int i = 0; i < NUMPLAYERS; i++)
 		CWorld::Players[i].Clear();
@@ -380,10 +391,12 @@ bool CGame::Initialise(const char* datFile)
 	CStreaming::LoadInitialPeds();
 	CStreaming::RequestBigBuildings(LEVEL_GENERIC);
 	CStreaming::LoadAllRequestedModels(false);
+	CStreaming::RemoveIslandsNotUsed(currLevel);
 	printf("Streaming uses %zuK of its memory", CStreaming::ms_memoryUsed / 1024); // original modifier was %d
 	LoadingScreen("Loading the Game", "Load animations", GetRandomSplashScreen());
 	CAnimManager::LoadAnimFiles();
 	CStreaming::LoadInitialWeapons();
+	CStreaming::LoadAllRequestedModels(0);
 	CPed::Initialise();
 	CRouteNode::Initialise();
 	CEventList::Initialise();
@@ -447,17 +460,26 @@ bool CGame::Initialise(const char* datFile)
 	CCollision::ms_collisionInMemory = currLevel;
 	for (int i = 0; i < MAX_PADS; i++)
 		CPad::GetPad(i)->Clear(true);
-	// TODO(Miami)
-	// DMAudio.SetStartingTrackPositions(1);
+#ifdef USE_TEXTURE_POOL
+	_TexturePoolsUnknown(true);
+#endif
+	DMAudio.SetStartingTrackPositions(true);
 	DMAudio.ChangeMusicMode(MUSICMODE_GAME);
 	return true;
 }
 
 bool CGame::ShutDown(void)
 {
+#ifdef USE_TEXTURE_POOL
+	_TexturePoolsUnknown(false);
+#endif
 	CReplay::FinishPlayback();
+	CReplay::EmptyReplayBuffer();
 	CPlane::Shutdown();
 	CTrain::Shutdown();
+	CScriptPaths::Shutdown();
+	// TODO(Miami)
+	// CWaterCreatures::RemoveAll();
 	CSpecialFX::Shutdown();
 #ifndef PS2
 	CGarages::Shutdown();
@@ -492,7 +514,7 @@ bool CGame::ShutDown(void)
 	CStreaming::Shutdown();
 	CTxdStore::GameShutdown();
 	CCollision::Shutdown();
-	CWaterLevel::Shutdown();
+	CWaterLevel::DestroyWavyAtomic();
 	CRubbish::Shutdown();
 	CClouds::Shutdown();
 	CShadows::Shutdown();
@@ -502,7 +524,11 @@ bool CGame::ShutDown(void)
 	CParticle::Shutdown();
 	CPools::ShutDown();
 	CTxdStore::RemoveTxdSlot(gameTxdSlot);
+	CMBlur::MotionBlurClose();
 	CdStreamRemoveImages();
+#ifdef USE_TEXTURE_POOL
+	_TexturePoolsFinalShutdown();
+#endif
 	return true;
 }
 
@@ -536,7 +562,10 @@ void CGame::ReInitGameObjectVariables(void)
 	CDraw::SetFOV(120.0f);
 	CDraw::ms_fLODDistance = 500.0f;
 	CStreaming::RequestBigBuildings(LEVEL_GENERIC);
+	CStreaming::RemoveIslandsNotUsed(LEVEL_BEACH);
+	CStreaming::RemoveIslandsNotUsed(LEVEL_MAINLAND);
 	CStreaming::LoadAllRequestedModels(false);
+	currArea = AREA_MAIN_MAP;
 	CPed::Initialise();
 	CEventList::Initialise();
 	CWeapon::InitialiseWeapons();
@@ -572,6 +601,7 @@ void CGame::ReInitGameObjectVariables(void)
 	CSpecialFX::Init();
 	CRopes::Init();
 	CWaterCannons::Init();
+	CScriptPaths::Init();
 	CParticle::ReloadConfig();
 
 #ifdef PS2_MENU
@@ -599,9 +629,13 @@ void CGame::ReloadIPLs(void)
 
 void CGame::ShutDownForRestart(void)
 {
+#ifdef USE_TEXTURE_POOL
+	_TexturePoolsUnknown(false);
+#endif
 	CReplay::FinishPlayback();
 	CReplay::EmptyReplayBuffer();
 	DMAudio.DestroyAllGameCreatedEntities();
+	CMovingThings::Shutdown();
 	
 	for (int i = 0; i < NUMPLAYERS; i++)
 		CWorld::Players[i].Clear();
@@ -612,18 +646,14 @@ void CGame::ShutDownForRestart(void)
 	CWorld::ClearForRestart();
 	CGameLogic::ClearShortCut();
 	CTimer::Shutdown();
-	CStreaming::FlushRequestList();
-	CStreaming::DeleteAllRwObjects();
-	CStreaming::RemoveAllUnusedModels();
-	CStreaming::ms_disableStreaming = false;
+	CStreaming::ReInit();
 	CRadar::RemoveRadarSections();
 	FrontEndMenuManager.UnloadTextures();
 	CParticleObject::RemoveAllExpireableParticleObjects();
-	//CWaterCreatures::RemoveAll(); //TODO VC
+	//CWaterCreatures::RemoveAll(); //TODO(Miami)
 	CSetPieces::Init();
 	CPedType::Shutdown();
 	CSpecialFX::Shutdown();
-	TidyUpMemory(true, false);
 }
 
 void CGame::InitialiseWhenRestarting(void)
@@ -648,13 +678,15 @@ void CGame::InitialiseWhenRestarting(void)
 	if ( FrontEndMenuManager.m_bWantToLoad == true )
 	{
 		RestoreForStartLoad();
-		CStreaming::LoadScene(TheCamera.GetPosition());
 	}
 	
 	ReInitGameObjectVariables();
 	
 	if ( FrontEndMenuManager.m_bWantToLoad == true )
 	{
+		FrontEndMenuManager.m_bWantToLoad = false;
+		// TODO(Miami)
+		//InitRadioStationPositionList();
 		if ( GenericLoad() == true )
 		{
 			DMAudio.ResetTimers(CTimer::GetTimeInMilliseconds());
@@ -669,6 +701,7 @@ void CGame::InitialiseWhenRestarting(void)
 				FrontEndMenuManager.MessageScreen("FED_LFL", true); // Loading save game has failed. The game will restart now. 
 			}
 			
+			TheCamera.SetFadeColour(0, 0, 0);
 			ShutDownForRestart();
 			CTimer::Stop();
 			CTimer::Initialise();
@@ -682,6 +715,9 @@ void CGame::InitialiseWhenRestarting(void)
 	CTimer::Update();
 	
 	DMAudio.ChangeMusicMode(MUSICMODE_GAME);
+#ifdef USE_TEXTURE_POOL
+	_TexturePoolsUnknown(true);
+#endif
 }
 
 void CGame::Process(void) 
@@ -690,20 +726,20 @@ void CGame::Process(void)
 #ifdef GTA_PS2
 	ProcessTidyUpMemory();
 #endif
-	TheCamera.SetMotionBlurAlpha(0);
-	if (TheCamera.m_BlurType == MOTION_BLUR_NONE || TheCamera.m_BlurType == MOTION_BLUR_SNIPER || TheCamera.m_BlurType == MOTION_BLUR_LIGHT_SCENE)
-		TheCamera.SetMotionBlur(0, 0, 0, 0, MOTION_BLUR_NONE);
 #ifdef DEBUGMENU
 	DebugMenuProcess();
 #endif
 	CCutsceneMgr::Update();
 	if (!CCutsceneMgr::IsCutsceneProcessing() && !CTimer::GetIsCodePaused())
 		FrontEndMenuManager.Process();
+	CTheZones::Update();
+	// DRM call in here
+	uint32 startTime = CTimer::GetCurrentTimeInCycles() / CTimer::GetCyclesPerMillisecond();
 	CStreaming::Update();
+	uint32 processTime = CTimer::GetCurrentTimeInCycles() / CTimer::GetCyclesPerMillisecond() - startTime;
 	CWindModifiers::Number = 0;
 	if (!CTimer::GetIsPaused())
 	{
-		CTheZones::Update();
 		CSprite2d::SetRecipNearClip();
 		CSprite2d::InitPerFrame();
 		CFont::InitPerFrame();
@@ -714,6 +750,7 @@ void CGame::Process(void)
 		CWeather::Update();
 		CTheScripts::Process();
 		CCollision::Update();
+		CScriptPaths::Update();
 		CTrain::UpdateTrains();
 		CPlane::UpdatePlanes();
 		CHeli::UpdateHelis();
@@ -726,7 +763,13 @@ void CGame::Process(void)
 		CEventList::Update();
 		CParticle::Update();
 		gFireManager.Update();
-		CPopulation::Update();
+		if (processTime >= 2) {
+			CPopulation::Update(false);
+		} else {
+			uint32 startTime = CTimer::GetCurrentTimeInCycles() / CTimer::GetCyclesPerMillisecond();
+			CPopulation::Update(true);
+			processTime = CTimer::GetCurrentTimeInCycles() / CTimer::GetCyclesPerMillisecond() - startTime;
+		}
 		CWeapon::UpdateWeapons();
 		if (!CCutsceneMgr::IsRunning())
 			CTheCarGenerators::Process();
@@ -759,9 +802,11 @@ void CGame::Process(void)
 		gPhoneInfo.Update();
 		if (!CReplay::IsPlayingBack())
 		{
-			CCarCtrl::GenerateRandomCars();
+			if (processTime < 2)
+				CCarCtrl::GenerateRandomCars();
 			CRoadBlocks::GenerateRoadBlocks();
 			CCarCtrl::RemoveDistantCars();
+			CCarCtrl::RemoveCarsIfThePoolGetsFull();
 		}
 	}
 }
@@ -792,16 +837,22 @@ CGame::CanSeeOutSideFromCurrArea(void)
 
 void CGame::DrasticTidyUpMemory(bool)
 {
+#ifdef USE_TEXTURE_POOL
+	// TODO
+#endif
 #ifdef PS2
 	// meow
 #endif
 }
 
-void CGame::TidyUpMemory(bool, bool)
+void CGame::TidyUpMemory(bool unk1, bool unk2)
 {
 #ifdef PS2
 	// meow
 #endif
+	if (unk2) {
+		DrasticTidyUpMemory(true); // parameter is unknown too
+	}
 }
 
 void CGame::ProcessTidyUpMemory(void)

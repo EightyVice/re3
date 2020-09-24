@@ -5,6 +5,9 @@
 
 #define SLOT_COUNT (8)
 
+void InitRadioStationPositionList();
+uint32 GetSavedRadioStationPosition(int32 station);
+void PopulateRadioStationPositionList();
 bool GenericSave(int file);
 bool GenericLoad();
 bool ReadInSizeofSaveFileBuffer(int32 &file, uint32 &size);
@@ -31,7 +34,7 @@ extern wchar SlotFileName[SLOT_COUNT][260];
 extern wchar SlotSaveDate[SLOT_COUNT][70];
 extern int CheckSum;
 extern enum eLevelName m_LevelToLoad;
-extern int Slots[SLOT_COUNT+1];
+extern int Slots[SLOT_COUNT];
 
 extern bool b_FoundRecentSavedGameWantToLoad;
 extern bool JustLoadedDontFadeInYet;

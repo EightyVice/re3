@@ -11,7 +11,11 @@
 #include "platform.h"
 #ifdef XINPUT
 #include <xinput.h>
+#if !defined(PSAPI_VERSION) || (PSAPI_VERSION > 1)
 #pragma comment( lib, "Xinput9_1_0.lib" )
+#else
+#pragma comment( lib, "Xinput.lib" )
+#endif
 #endif
 
 #include "Pad.h"
@@ -41,6 +45,9 @@
 #include "Fluff.h"
 #include "Gangs.h"
 #include "platform.h"
+#include "Stats.h"
+#include "CarCtrl.h"
+#include "TrafficLights.h"
 
 #ifdef GTA_PS2
 #include "eetypes.h"
@@ -59,6 +66,7 @@ bool CPad::bDisplayNoControllerMessage;
 bool CPad::bObsoleteControllerMessage;
 bool CPad::bOldDisplayNoControllerMessage;
 bool CPad::m_bMapPadOneToPadTwo;
+bool CPad::bHasPlayerCheated;
 #ifdef GTA_PS2
 unsigned char act_direct[6];
 unsigned char act_align[6];
@@ -80,6 +88,10 @@ bool CPad::IsAffectedByController = false;
 
 _TODO("gbFastTime");
 extern bool gbFastTime;
+
+#ifdef WALLCLIMB_CHEAT
+extern bool gGravityCheat;
+#endif
 
 void WeaponCheat1()
 {
@@ -201,15 +213,20 @@ void HealthCheat()
 	}
 }
 
-void VehicleCheat(bool something, int model)
+void VehicleCheat(int model)
 {
 	CHud::SetHelpMessage(TheText.Get("CHEAT1"), true);
-	CStreaming::RequestModel(model, 0);
-	CStreaming::LoadAllRequestedModels(something);
+	CStreaming::RequestModel(model, STREAMFLAGS_DONT_REMOVE);
+	CStreaming::LoadAllRequestedModels(false);
 	if (CStreaming::ms_aInfoForModel[model].m_loadState == STREAMSTATE_LOADED) {
 		CHud::SetHelpMessage(TheText.Get("CHEAT1"), true);
-		int32 node = ThePaths.FindNodeClosestToCoors(FindPlayerCoors(), PATH_CAR, 100.0f);
 
+		if (!(CStreaming::ms_aInfoForModel[model].m_loadState & STREAMFLAGS_DONT_REMOVE)) {
+			CStreaming::SetModelIsDeletable(model);
+			CStreaming::SetModelTxdIsDeletable(model);
+		}
+
+		int32 node = ThePaths.FindNodeClosestToCoors(FindPlayerCoors(), PATH_CAR, 100.0f);
 		if (node < 0) return;
 
 #ifdef FIX_BUGS
@@ -228,6 +245,8 @@ void VehicleCheat(bool something, int model)
 			CWorld::Add(vehicle);
 		}
 	}
+	CStats::CheatedCount += 1000;
+	CPad::bHasPlayerCheated = true;
 }
 
 void BlowUpCarsCheat()
@@ -287,6 +306,8 @@ void MayhemCheat()
 			PED_FLAG_GANG2 | PED_FLAG_GANG3 | PED_FLAG_GANG4 | PED_FLAG_GANG5 |
 			PED_FLAG_GANG6 | PED_FLAG_GANG7 | PED_FLAG_GANG8 | PED_FLAG_GANG9 |
 			PED_FLAG_EMERGENCY | PED_FLAG_PROSTITUTE | PED_FLAG_CRIMINAL | PED_FLAG_SPECIAL );
+	CStats::CheatedCount += 1000;
+	CPad::bHasPlayerCheated = true;
 }
 
 void EverybodyAttacksPlayerCheat()
@@ -294,12 +315,17 @@ void EverybodyAttacksPlayerCheat()
 	CHud::SetHelpMessage(TheText.Get("CHEAT1"), true);
 	for (int i = PEDTYPE_CIVMALE; i < PEDTYPE_SPECIAL; i++)
 		CPedType::AddThreat(i, PED_FLAG_PLAYER1);
+
+	CStats::CheatedCount += 1000;
+	CPad::bHasPlayerCheated = true;
 }
 
 void WeaponsForAllCheat()
 {
 	CHud::SetHelpMessage(TheText.Get("CHEAT1"), true);
 	CPopulation::ms_bGivePedsWeapons = !CPopulation::ms_bGivePedsWeapons;
+	CStats::CheatedCount += 1000;
+	CPad::bHasPlayerCheated = true;
 }
 
 void FastTimeCheat()
@@ -346,16 +372,16 @@ void SunnyWeatherCheat()
 	CWeather::ForceWeatherNow(WEATHER_SUNNY);
 }
 
+void ExtraSunnyWeatherCheat()
+{
+	CHud::SetHelpMessage(TheText.Get("CHEAT7"), true);
+	CWeather::ForceWeatherNow(WEATHER_EXTRA_SUNNY);
+}
+
 void CloudyWeatherCheat()
 {
 	CHud::SetHelpMessage(TheText.Get("CHEAT7"), true);
 	CWeather::ForceWeatherNow(WEATHER_CLOUDY);
-}
-
-void StormyWeatherCheat()
-{
-	CHud::SetHelpMessage(TheText.Get("CHEAT7"), true);
-	CWeather::ForceWeatherNow(WEATHER_HURRICANE);
 }
 
 void RainyWeatherCheat()
@@ -380,19 +406,24 @@ void OnlyRenderWheelsCheat()
 {
 	CHud::SetHelpMessage(TheText.Get("CHEAT1"), true);
 	CVehicle::bWheelsOnlyCheat = !CVehicle::bWheelsOnlyCheat;
+	CStats::CheatedCount += 1000;
+	CPad::bHasPlayerCheated = true;
 }
-
 
 void ChittyChittyBangBangCheat()
 {
 	CHud::SetHelpMessage(TheText.Get("CHEAT1"), true);
 	CVehicle::bAllDodosCheat = !CVehicle::bAllDodosCheat;
+	CStats::CheatedCount += 1000;
+	CPad::bHasPlayerCheated = true;
 }
 
 void StrongGripCheat()
 {
 	CHud::SetHelpMessage(TheText.Get("CHEAT1"), true);
 	CVehicle::bCheat3 = !CVehicle::bCheat3;
+	CStats::CheatedCount += 1000;
+	CPad::bHasPlayerCheated = true;
 }
 
 void NastyLimbsCheat()
@@ -404,6 +435,7 @@ void FannyMagnetCheat()
 {
 	CHud::SetHelpMessage(TheText.Get("CHEAT1"), true);
 	CPed::bFannyMagnetCheat = !CPed::bFannyMagnetCheat;
+	CPad::bHasPlayerCheated = true;
 }
 
 void BlackCarsCheat()
@@ -418,6 +450,18 @@ void PinkCarsCheat()
 	CHud::SetHelpMessage(TheText.Get("CHEAT1"), true);
 	gbBlackCars = false;
 	gbPinkCars = true;
+}
+
+void TrafficLightsCheat()
+{
+	CHud::SetHelpMessage(TheText.Get("CHEAT1"), true);
+	CTrafficLights::bGreenLightsCheat = true;
+}
+
+void MadCarsCheat()
+{
+	CHud::SetHelpMessage(TheText.Get("CHEAT1"), true);
+	CCarCtrl::bMadDriversCheat = true;
 }
 
 void NoSeaBedCheat(void)
@@ -437,6 +481,7 @@ void BackToTheFuture(void)
 {
 	CHud::SetHelpMessage(TheText.Get("CHEAT1"), true);
 	CVehicle::bHoverCheat = !CVehicle::bHoverCheat;
+	CPad::bHasPlayerCheated = true;
 }
 
 void SuicideCheat(void) {
@@ -453,6 +498,8 @@ void DoChicksWithGunsCheat(void) {
 	CStreaming::RemoveCurrentZonesModels();
 	CGangs::SetGangPedModels(GANG_PLAYER, MI_HFYBE, MI_WFYBE);
 	CGangs::SetGangWeapons(GANG_PLAYER, WEAPONTYPE_M4, WEAPONTYPE_M4);
+	CStats::CheatedCount += 1000;
+	CPad::bHasPlayerCheated = true;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -511,10 +558,31 @@ void AltDodoCheat(void)
 }
 #endif
 
+#ifdef WALLCLIMB_CHEAT
+void WallClimbingCheat(void)
+{
+	wchar* string;
+	if (gGravityCheat) {
+		string = TheText.Get("CHEATOF");
+		gGravityCheat = false;
+	}
+	else {
+		string = TheText.Get("CHEAT1");
+		gGravityCheat = true;
+	}
+	CHud::SetHelpMessage(string, true);
+}
+#endif
+
 void FlyingFishCheat(void)
 {
 	CHud::SetHelpMessage(TheText.Get("CHEAT1"), true);
 	CVehicle::bCheat8 = !CVehicle::bCheat8;
+}
+
+void DoShowChaseStatCheat(void) {
+	CHud::SetHelpMessage(TheText.Get("CHEAT1"), true);
+	CStats::ShowChaseStatOnScreen = 1;
 }
 
 bool
@@ -610,6 +678,11 @@ void CPad::Clear(bool bResetPlayerControls)
 	Phase = 0;
 	ShakeFreq = 0;
 	ShakeDur = 0;
+
+	for (int32 i = 0; i < DRUNK_STEERING_BUFFER_SIZE; i++)
+		SteeringLeftRightBuffer[i] = 0;
+
+	DrunkDrivingBufferUsed = 0;
 
 	if ( bResetPlayerControls )
 		DisablePlayerControls = PLAYERCONTROL_ENABLED;
@@ -994,7 +1067,7 @@ void CPad::AddToCheatString(char c)
 
 	// "CCCCCC321TCT"	-	CIRCLE CIRCLE CIRCLE CIRCLE CIRCLE CIRCLE R1 L2 L1 TRIANGLE CIRCLE TRIANGLE
 	else if ( !_CHEATCMP("TCT123CCCCCC") )
-		VehicleCheat(true, MI_RHINO);
+		VehicleCheat(MI_RHINO);
 
 	// "CCCSSSSS1TCT"	-	CIRCLE CIRCLE CIRCLE SQUARE SQUARE SQUARE SQUARE SQUARE L1 TRIANGLE CIRCLE TRIANGLE
 	else if ( !_CHEATCMP("TCT1SSSSSCCC") )
@@ -1106,19 +1179,22 @@ void CPad::AddToPCCheatString(char c)
 	// "APLEASANTDAY"
 	else if (!Cheat_strncmp(KeyBoardCheatString, "\\FKU[\\VHFW]I")) {
 		KeyBoardCheatString[0] = ' ';
-		CloudyWeatherCheat();
+		SunnyWeatherCheat();
 	}
 	// "ALOVELYDAY"
 	else if (!Cheat_strncmp(KeyBoardCheatString, "\\FKZY`YVML")) {
 		KeyBoardCheatString[0] = ' ';
-		SunnyWeatherCheat();
+		ExtraSunnyWeatherCheat();
 	}
 	// "ABITDRIEG"
-
+	else if (!Cheat_strncmp(KeyBoardCheatString, "JJPSQoLIB")) {
+		KeyBoardCheatString[0] = ' ';
+		CloudyWeatherCheat();
+	}
 	// "CATSANDDOGS"
 	else if (!Cheat_strncmp(KeyBoardCheatString, "VLVEQiDZULP")) {
 		KeyBoardCheatString[0] = ' ';
-		StormyWeatherCheat();
+		RainyWeatherCheat();
 	}
 	// "CANTSEEATHING"
 	else if (!Cheat_strncmp(KeyBoardCheatString, "JSPIa\\HLT_[IJ")) {
@@ -1128,10 +1204,13 @@ void CPad::AddToPCCheatString(char c)
 	// "PANZER"
 	else if (!Cheat_strncmp(KeyBoardCheatString, "UJaONk")) {
 		KeyBoardCheatString[0] = ' ';
-		VehicleCheat(true, MI_RHINO);
+		VehicleCheat(MI_RHINO);
 	}
 	// "LIFEISPASSINGMEBY"
-
+	else if (!Cheat_strncmp(KeyBoardCheatString, "\\GLNTiLZTL][PeSOh")) {
+		KeyBoardCheatString[0] = ' ';
+		FastWeatherCheat();
+	}
 	// "BIGBANG"
 	else if (!Cheat_strncmp(KeyBoardCheatString, "JSHCTdE")) {
 		KeyBoardCheatString[0] = ' ';
@@ -1185,6 +1264,7 @@ void CPad::AddToPCCheatString(char c)
 	// "CHASESTAT"
 	else if (!Cheat_strncmp(KeyBoardCheatString, "WF[TRnDOD")) {
 		KeyBoardCheatString[0] = ' ';
+		DoShowChaseStatCheat();
 	}
 	// "CHICKSWITHGUNS"
 	else if (!Cheat_strncmp(KeyBoardCheatString, "VS\\HUoL^TVPQOc")) {
@@ -1199,10 +1279,12 @@ void CPad::AddToPCCheatString(char c)
 	// "GREENLIGHT"
 	else if (!Cheat_strncmp(KeyBoardCheatString, "WMNJYiHLSR")) {
 		KeyBoardCheatString[0] = ' ';
+		TrafficLightsCheat();
 	}
 	// "MIAMITRAFFIC"
 	else if (!Cheat_strncmp(KeyBoardCheatString, "FNMGNmWPNLVU")) {
 		KeyBoardCheatString[0] = ' ';
+		MadCarsCheat();
 	}
 	// "AHAIRDRESSERSCAR"
 	else if (!Cheat_strncmp(KeyBoardCheatString, "UFJT_`VZF]QZPaUG")) {
@@ -1217,47 +1299,47 @@ void CPad::AddToPCCheatString(char c)
 	// "TRAVELINSTYLE"
 	else if (!Cheat_strncmp(KeyBoardCheatString, "HQ`U`iLSFaNZ[")) {
 		KeyBoardCheatString[0] = ' ';
-		VehicleCheat(true, MI_BLOODRA);
+		VehicleCheat(MI_BLOODRA);
 	}
 	// "THELASTRIDE"
 	else if (!Cheat_strncmp(KeyBoardCheatString, "HIPSanDSFSa")) {
 		KeyBoardCheatString[0] = ' ';
-		VehicleCheat(true, MI_ROMERO);
+		VehicleCheat(MI_ROMERO);
 	}
 	// "ROCKANDROLLCAR"
 	else if (!Cheat_strncmp(KeyBoardCheatString, "UFJMYjUKOLXKVr")) {
 		KeyBoardCheatString[0] = ' ';
-		VehicleCheat(true, MI_LOVEFIST);
+		VehicleCheat(MI_LOVEFIST);
 	}
 	// "RUBBISHCAR"
 	else if (!Cheat_strncmp(KeyBoardCheatString, "UFJI`dEIV]")) {
 		KeyBoardCheatString[0] = ' ';
-		VehicleCheat(true, MI_TRASH);
+		VehicleCheat(MI_TRASH);
 	}
 	// "GETTHEREQUICKLY"
 	else if (!Cheat_strncmp(KeyBoardCheatString, "\\QRDVpTLSPU\\[eT")) {
 		KeyBoardCheatString[0] = ' ';
-		VehicleCheat(true, MI_BLOODRB);
+		VehicleCheat(MI_BLOODRB);
 	}
 	// "GETTHEREFAST"
 	else if (!Cheat_strncmp(KeyBoardCheatString, "WXHGRmHOU_RO")) {
 		KeyBoardCheatString[0] = ' ';
-		VehicleCheat(true, MI_SABRETUR);
+		VehicleCheat(MI_SABRETUR);
 	}
 	// "BETTERTHANWALKING"
 	else if (!Cheat_strncmp(KeyBoardCheatString, "JSPLY\\ZUBSaZLtaK^")) {
 		KeyBoardCheatString[0] = ' ';
-		VehicleCheat(true, MI_CADDY);
+		VehicleCheat(MI_CADDY);
 	}
 	// "GETTHEREFASTINDEED"
 	else if (!Cheat_strncmp(KeyBoardCheatString, "GJLE[dWZBQfZLvRXa[^WHL")) {
 		KeyBoardCheatString[0] = ' ';
-		VehicleCheat(true, MI_HOTRINA);
+		VehicleCheat(MI_HOTRINA);
 	}
 	// "GETTHEREAMAZINGLYFAST"
 	else if (!Cheat_strncmp(KeyBoardCheatString, "WXHGfgJUJeNUHe_Kdg^HJ")) {
 		KeyBoardCheatString[0] = ' ';
-		VehicleCheat(true, MI_HOTRINB);
+		VehicleCheat(MI_HOTRINB);
 	}
 	// LOOKLIKELANCE
 	else if (!Cheat_strncmp(KeyBoardCheatString, "HHUBY`NPMV\\WS")) {
@@ -1309,6 +1391,16 @@ void CPad::AddToPCCheatString(char c)
 		KeyBoardCheatString[0] = ' ';
 		ChangePlayerModel("igdiaz");
 	}
+	// DEEPFRIEDMARSBARS
+	else if (!Cheat_strncmp(KeyBoardCheatString, "VWHC`mDTEPVZMpRK")) {
+		KeyBoardCheatString[0] = ' ';
+		gfTommyFatness = 0.26f;
+	}
+	// PROGRAMMER
+	else if (!Cheat_strncmp(KeyBoardCheatString, "UJTNNmJVS[")) {
+		KeyBoardCheatString[0] = ' ';
+		gfTommyFatness = -0.3f;
+	}
 	// SEAWAYS
 	else if (!Cheat_strncmp(KeyBoardCheatString, "V^HXN`V")) {
 		KeyBoardCheatString[0] = ' ';
@@ -1329,17 +1421,6 @@ void CPad::AddToPCCheatString(char c)
 		KeyBoardCheatString[0] = ' ';
 		FannyMagnetCheat();
 	}
-	// "ILOVESCOTLAND"
-	if (!_CHEATCMP("DNALTOCSEVOLI"))
-		RainyWeatherCheat();
-
-	// "MADWEATHER"
-	if (!_CHEATCMP("REHTAEWDAM"))
-		FastWeatherCheat();
-
-	// "CHITTYCHITTYBB"
-	if (!_CHEATCMP("BBYTTIHCYTTIHC"))
-		ChittyChittyBangBangCheat();
 
 	// "NASTYLIMBSCHEAT"
 	if (!_CHEATCMP("TAEHCSBMILYTSAN"))
@@ -1367,6 +1448,12 @@ void CPad::AddToPCCheatString(char c)
 	// "IWANTTOMASTERDODO"
 	if (!_CHEATCMP("ODODRETSAMOTTNAWI"))
 		AltDodoCheat();
+#endif
+
+#ifdef WALLCLIMB_CHEAT
+	// "SPIDERCAR"
+	if (!_CHEATCMP("RACREDIPS"))
+		WallClimbingCheat();
 #endif
 
 #if !defined(PC_WATER) && defined(WATER_CHEATS)
@@ -1786,6 +1873,9 @@ void CPad::Update(int16 pad)
 
 	bHornHistory[iCurrHornHistory] = GetHorn();
 
+	for (int32 i = DRUNK_STEERING_BUFFER_SIZE - 2; i >= 0; i--) {
+		SteeringLeftRightBuffer[i + 1] = SteeringLeftRightBuffer[i];
+	}
 
 	if ( !bDisplayNoControllerMessage )
 		CGame::bDemoMode = false;
@@ -1879,6 +1969,7 @@ int16 CPad::GetSteeringLeftRight(void)
 	if ( ArePlayerControlsDisabled() )
 		return 0;
 
+	int16 value;
 	switch (CURMODE)
 	{
 		case 0:
@@ -1888,9 +1979,12 @@ int16 CPad::GetSteeringLeftRight(void)
 			int16 dpad = (NewState.DPadRight - NewState.DPadLeft) / 2;
 
 			if ( Abs(axis) > Abs(dpad) )
-				return axis;
+				value = axis;
 			else
-				return dpad;
+				value = dpad;
+
+			SteeringLeftRightBuffer[0] = value;
+			value = SteeringLeftRightBuffer[DrunkDrivingBufferUsed];
 
 			break;
 		}
@@ -1898,13 +1992,18 @@ int16 CPad::GetSteeringLeftRight(void)
 		case 1:
 		case 3:
 		{
-			return NewState.LeftStickX;
-
+			SteeringLeftRightBuffer[0] = NewState.LeftStickX;
+			value = SteeringLeftRightBuffer[DrunkDrivingBufferUsed];
+			break;
+		}
+		default:
+		{
+			value = 0;
 			break;
 		}
 	}
 
-	return 0;
+	return value;
 }
 
 int16 CPad::GetSteeringUpDown(void)
@@ -3067,7 +3166,9 @@ void CPad::ResetCheats(void)
 	CVehicle::bCheat8 = false;
 	gbBlackCars = false;
 	gbPinkCars = false;
-
+	CCarCtrl::bMadDriversCheat = false;
+	CTrafficLights::bGreenLightsCheat = false;
+	CStats::ShowChaseStatOnScreen = 0;
 	gbFastTime = false;
 	CTimer::SetTimeScale(1.0f);
 }

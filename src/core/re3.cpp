@@ -35,6 +35,7 @@
 #include "Script.h"
 #include "MBlur.h"
 #include "postfx.h"
+#include "custompipes.h"
 
 #ifndef _WIN32
 #include "assert.h"
@@ -74,116 +75,12 @@ mysrand(unsigned int seed)
 	myrand_seed = seed;
 }
 
-#ifdef CUSTOM_FRONTEND_OPTIONS
-#include "frontendoption.h"
-#include "platform.h"
-
-void ReloadFrontendOptions(void)
-{
-	CustomFrontendOptionsPopulate();
-}
-
-#ifdef MORE_LANGUAGES
-void LangPolSelect(int8 action)
-{
-	if (action == FEOPTION_ACTION_SELECT) {
-		FrontEndMenuManager.m_PrefsLanguage = CMenuManager::LANGUAGE_POLISH;
-		FrontEndMenuManager.m_bFrontEnd_ReloadObrTxtGxt = true;
-		FrontEndMenuManager.InitialiseChangedLanguageSettings();
-		FrontEndMenuManager.SaveSettings();
-	}
-}
-
-void LangRusSelect(int8 action)
-{
-	if (action == FEOPTION_ACTION_SELECT) {
-		FrontEndMenuManager.m_PrefsLanguage = CMenuManager::LANGUAGE_RUSSIAN;
-		FrontEndMenuManager.m_bFrontEnd_ReloadObrTxtGxt = true;
-		FrontEndMenuManager.InitialiseChangedLanguageSettings();
-		FrontEndMenuManager.SaveSettings();
-	}
-}
-
-void LangJapSelect(int8 action)
-{
-	if (action == FEOPTION_ACTION_SELECT) {
-		FrontEndMenuManager.m_PrefsLanguage = CMenuManager::LANGUAGE_JAPANESE;
-		FrontEndMenuManager.m_bFrontEnd_ReloadObrTxtGxt = true;
-		FrontEndMenuManager.InitialiseChangedLanguageSettings();
-		FrontEndMenuManager.SaveSettings();
-	}
-}
-#endif
-
-#ifdef IMPROVED_VIDEOMODE
-void ScreenModeChange(int8 displayedValue)
-{
-	if (displayedValue != FrontEndMenuManager.m_nPrefsWindowed) {
-		FrontEndMenuManager.m_nPrefsWindowed = displayedValue;
-		_psSelectScreenVM(FrontEndMenuManager.m_nPrefsVideoMode); // apply same resolution
-		FrontEndMenuManager.SetHelperText(0);
-		FrontEndMenuManager.SaveSettings();
-	}
-}
-#endif
-
-#ifdef FREE_CAM
-void ToggleFreeCam(int8 action)
-{
-	if (action == FEOPTION_ACTION_SELECT) {
-		TheCamera.bFreeCam = !TheCamera.bFreeCam;
-		FrontEndMenuManager.SaveSettings();
-	}
-}
-#endif
-
-#ifdef CUTSCENE_BORDERS_SWITCH
-void BorderModeChange(int8 displayedValue)
-{
-	CMenuManager::m_PrefsCutsceneBorders = !!displayedValue;
-	FrontEndMenuManager.SaveSettings();
-}
-#endif
-
-// Reloaded on language change, so you can use hardcoded wchar* and TheText.Get with peace of mind
-void
-CustomFrontendOptionsPopulate(void)
-{
-	RemoveCustomFrontendOptions(); // if exist
-
-#ifdef MORE_LANGUAGES
-	FrontendOptionSetPosition(MENUPAGE_LANGUAGE_SETTINGS);
-	FrontendOptionAddDynamic(TheText.Get("FEL_POL"), nil, LangPolSelect, nil);
-	FrontendOptionAddDynamic(TheText.Get("FEL_RUS"), nil, LangRusSelect, nil);
-	FrontendOptionAddDynamic(TheText.Get("FEL_JAP"), nil, LangJapSelect, nil);
-#endif
-
-#ifdef IMPROVED_VIDEOMODE
-	static const wchar *screenModes[] = { (wchar*)L"FULLSCREEN", (wchar*)L"WINDOWED" };
-	FrontendOptionSetPosition(MENUPAGE_GRAPHICS_SETTINGS, 8);
-	FrontendOptionAddSelect(TheText.Get("SCRFOR"), screenModes, 2, (int8*)&FrontEndMenuManager.m_nPrefsWindowed, true, ScreenModeChange, nil);
-#endif
-
-#ifdef FREE_CAM
-	static const wchar *text = (wchar*)L"TOGGLE FREE CAM";
-	FrontendOptionSetPosition(MENUPAGE_CONTROLLER_PC, 1);
-	FrontendOptionAddDynamic(text, nil, ToggleFreeCam, nil);
-#endif
-
-#ifdef CUTSCENE_BORDERS_SWITCH
-	static const wchar *off_on[] = { TheText.Get("FEM_OFF"), TheText.Get("FEM_ON") };
-	FrontendOptionSetPosition(MENUPAGE_GRAPHICS_SETTINGS, 9);
-	FrontendOptionAddSelect((const wchar *)L"CUTSCENE BORDERS", off_on, 2, (int8 *)&CMenuManager::m_PrefsCutsceneBorders, false, BorderModeChange, nil);
-#endif
-}
-#endif
-
 #ifdef DEBUGMENU
 void WeaponCheat1();
 void WeaponCheat2();
 void WeaponCheat3();
 void HealthCheat();
-void VehicleCheat(bool something, int model);
+void VehicleCheat(int model);
 void BlowUpCarsCheat();
 void ChangePlayerCheat();
 void MayhemCheat();
@@ -403,6 +300,12 @@ TWEAKSWITCH(CWeather::NewWeatherType, 0, 3, wt, NULL);
 */
 
 void
+switchWeather(void)
+{
+	CWeather::StreamAfterRainTimer = 0;
+}
+
+void
 DebugMenuPopulate(void)
 {
 	if(1){
@@ -435,11 +338,11 @@ DebugMenuPopulate(void)
 		e = DebugMenuAddVar("Time & Weather", "Current Minute", &CClock::GetMinutesRef(),
 			[](){ CWeather::InterpolationValue = CClock::GetMinutes()/60.0f; }, 1, 0, 59, nil);
 			DebugMenuEntrySetWrap(e, true);
-		e = DebugMenuAddVar("Time & Weather", "Old Weather", (int16*)&CWeather::OldWeatherType, nil, 1, 0, 5, weathers);
+		e = DebugMenuAddVar("Time & Weather", "Old Weather", (int16*)&CWeather::OldWeatherType, switchWeather, 1, 0, 5, weathers);
 		DebugMenuEntrySetWrap(e, true);
-		e = DebugMenuAddVar("Time & Weather", "New Weather", (int16*)&CWeather::NewWeatherType, nil, 1, 0, 5, weathers);
+		e = DebugMenuAddVar("Time & Weather", "New Weather", (int16*)&CWeather::NewWeatherType, switchWeather, 1, 0, 5, weathers);
 		DebugMenuEntrySetWrap(e, true);
-		DebugMenuAddVarBool8("Time & Weather", "Extracolours On", &CTimeCycle::m_bExtraColourOn, nil);
+		DebugMenuAddVarBool32("Time & Weather", "Extracolours On", &CTimeCycle::m_bExtraColourOn, nil);
 		DebugMenuAddVar("Time & Weather", "Extracolour", &CTimeCycle::m_ExtraColour, nil, 1, 0, 23, extracols);
 		DebugMenuAddVar("Time & Weather", "Time scale", (float*)&CTimer::GetTimeScale(), nil, 0.1f, 0.0f, 10.0f);
 
@@ -450,7 +353,7 @@ DebugMenuPopulate(void)
 		DebugMenuAddCmd("Cheats", "Health", HealthCheat);
 		DebugMenuAddCmd("Cheats", "Wanted level up", WantedLevelUpCheat);
 		DebugMenuAddCmd("Cheats", "Wanted level down", WantedLevelDownCheat);
-		DebugMenuAddCmd("Cheats", "Tank", []() { VehicleCheat(true, MI_TAXI); });
+		DebugMenuAddCmd("Cheats", "Tank", []() { VehicleCheat(MI_TAXI); });
 		DebugMenuAddCmd("Cheats", "Blow up cars", BlowUpCarsCheat);
 		DebugMenuAddCmd("Cheats", "Change player", ChangePlayerCheat);
 		DebugMenuAddCmd("Cheats", "Mayhem", MayhemCheat);
@@ -526,7 +429,20 @@ DebugMenuPopulate(void)
 		DebugMenuAddVarBool8("Render", "Motion Blur", &CPostFX::MotionBlurOn, nil);
 #endif
 		DebugMenuAddVar("Render", "Drunkness", &CMBlur::Drunkness, nil, 0.05f, 0, 1.0f);
+#ifndef MASTER
 		DebugMenuAddVarBool8("Render", "Occlusion debug", &bDisplayOccDebugStuff, nil);
+#endif
+#ifdef EXTENDED_PIPELINES
+		static const char *vehpipenames[] = { "MatFX", "Neo" };
+		e = DebugMenuAddVar("Render", "Vehicle Pipeline", &CustomPipes::VehiclePipeSwitch, nil,
+			1, CustomPipes::VEHICLEPIPE_MATFX, CustomPipes::VEHICLEPIPE_NEO, vehpipenames);
+		DebugMenuEntrySetWrap(e, true);
+		DebugMenuAddVar("Render", "Neo Vehicle Shininess", &CustomPipes::VehicleShininess, nil, 0.1f, 0, 1.0f);
+		DebugMenuAddVar("Render", "Neo Vehicle Specularity", &CustomPipes::VehicleSpecularity, nil, 0.1f, 0, 1.0f);
+		DebugMenuAddVar("Render", "Neo Ped Rim light", &CustomPipes::RimlightMult, nil, 0.1f, 0, 1.0f);
+		DebugMenuAddVar("Render", "Neo World Lightmaps", &CustomPipes::LightmapMult, nil, 0.1f, 0, 1.0f);
+		DebugMenuAddVar("Render", "Neo Road Gloss", &CustomPipes::GlossMult, nil, 0.1f, 0, 1.0f);
+#endif
 		DebugMenuAddVarBool8("Render", "Show Ped Paths", &gbShowPedPaths, nil);
 		DebugMenuAddVarBool8("Render", "Show Car Paths", &gbShowCarPaths, nil);
 		DebugMenuAddVarBool8("Render", "Show Car Path Links", &gbShowCarPathsLinks, nil);
@@ -553,9 +469,6 @@ DebugMenuPopulate(void)
 
 		DebugMenuAddVarBool8("Debug", "Script Heli On", &CHeli::ScriptHeliOn, nil);
 
-#ifdef CUSTOM_FRONTEND_OPTIONS
-		DebugMenuAddCmd("Debug", "Reload custom frontend options", ReloadFrontendOptions);
-#endif
 		DebugMenuAddCmd("Debug", "Start Credits", CCredits::Start);
 		DebugMenuAddCmd("Debug", "Stop Credits", CCredits::Stop);
 

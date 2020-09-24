@@ -37,7 +37,7 @@ struct intro_script_rectangle
 VALIDATE_SIZE(intro_script_rectangle, 0x18);
 
 enum {
-	SCRIPT_TEXT_MAX_LENGTH = 500
+	SCRIPT_TEXT_MAX_LENGTH = 100
 };
 
 struct intro_text_line 
@@ -122,7 +122,7 @@ struct CMissionCleanupEntity
 enum {
 	MAX_CLEANUP = 50,
 	MAX_UPSIDEDOWN_CAR_CHECKS = 6,
-	MAX_STUCK_CAR_CHECKS = 6
+	MAX_STUCK_CAR_CHECKS = 16
 };
 
 class CMissionCleanup
@@ -138,7 +138,7 @@ public:
 	void AddEntityToList(int32, uint8);
 	void RemoveEntityFromList(int32, uint8);
 	void Process();
-	void CheckIfCollisionHasLoadedForMissionObject();
+	void CheckIfCollisionHasLoadedForMissionObjects();
 	CPhysical* DoesThisEntityWaitForCollision(int i);
 };
 
@@ -227,7 +227,11 @@ enum {
 };
 
 enum {
+#ifdef PS2
+	SIZE_MAIN_SCRIPT = 205512,
+#else
 	SIZE_MAIN_SCRIPT = 225512,
+#endif
 	SIZE_MISSION_SCRIPT = 35000,
 	SIZE_SCRIPT_SPACE = SIZE_MAIN_SCRIPT + SIZE_MISSION_SCRIPT
 };
@@ -282,12 +286,12 @@ class CTheScripts
 	static uint8 UseTextCommands;
 	static uint16 CommandsExecuted;
 	static uint16 ScriptsUpdated;
-	static uint8 RiotIntensity;
 	static uint32 LastMissionPassedTime;
 	static uint16 NumberOfExclusiveMissionScripts;
 	static bool bPlayerIsInTheStatium;
+public:
+	static uint8 RiotIntensity;
 	static bool bPlayerHasMetDebbieHarry;
-
 public:
 	static void Init();
 	static void Process();
@@ -374,10 +378,10 @@ private:
 	static int32 GetNewUniqueScriptSphereIndex(int32 index);
 	static void RemoveScriptSphere(int32 index);
 	static void RemoveScriptTextureDictionary();
+public:
 	static void RemoveThisPed(CPed* pPed);
 
 #ifdef MISSION_SWITCHER
-public:
 	static void SwitchToMission(int32 mission);
 #endif
 
